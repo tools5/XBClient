@@ -1,15 +1,29 @@
 name: Android Build (BBcloud)
 
 on:
-  push:
-    branches: [ "main", "master", "develop" ]
-  pull_request:
-    paths: [ "apps/android/**", "build.gradle.kts", "gradle.properties", "apps/android/src/main/res/values/strings.xml" ]
   workflow_dispatch:
+
+permissions:
+  contents: read
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      CARGO_TERM_COLOR: always
+      XBCLIENT_DEFAULT_API_URL: ${{ secrets.XBCLIENT_DEFAULT_API_URL }}
+      XBCLIENT_APP_NAME: ${{ secrets.XBCLIENT_APP_NAME }}
+      XBCLIENT_APPLICATION_ID: ${{ secrets.XBCLIENT_APPLICATION_ID }}
+      XBCLIENT_ADMOB_APP_ID: ${{ secrets.XBCLIENT_ADMOB_APP_ID }}
+      XBCLIENT_USER_AGENT: ${{ secrets.XBCLIENT_USER_AGENT }}
+      XBCLIENT_OAUTH_CALLBACK_SCHEME: ${{ secrets.XBCLIENT_OAUTH_CALLBACK_SCHEME }}
+      XBCLIENT_WEBSITE_URL: ${{ secrets.XBCLIENT_WEBSITE_URL }}
+      XBCLIENT_PRIVACY_POLICY_URL: ${{ secrets.XBCLIENT_PRIVACY_POLICY_URL }}
+      XBCLIENT_USER_AGREEMENT_URL: ${{ secrets.XBCLIENT_USER_AGREEMENT_URL }}
+      XBCLIENT_RELEASE_STORE_BASE64: ${{ secrets.XBCLIENT_RELEASE_STORE_BASE64 }}
+      XBCLIENT_RELEASE_STORE_PASSWORD: ${{ secrets.XBCLIENT_RELEASE_STORE_PASSWORD }}
+      XBCLIENT_RELEASE_KEY_ALIAS: ${{ secrets.XBCLIENT_RELEASE_KEY_ALIAS }}
+      XBCLIENT_RELEASE_KEY_PASSWORD: ${{ secrets.XBCLIENT_RELEASE_KEY_PASSWORD }}
 
     steps:
       - name: Checkout code
@@ -27,22 +41,48 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x ./gradlew
 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v5
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: 'platforms;android-37.0 build-tools;36.1.0 ndk;28.2.13676358'
+
+      - name: Set up Rust Android target
+        run: rustup target add aarch64-linux-android
+
+      - name: Validate build secrets
+        shell: bash
+        run: |
+          for name in XBCLIENT_DEFAULT_API_URL XBCLIENT_APP_NAME XBCLIENT_APPLICATION_ID XBCLIENT_ADMOB_APP_ID XBCLIENT_USER_AGENT XBCLIENT_OAUTH_CALLBACK_SCHEME XBCLIENT_RELEASE_STORE_BASE64 XBCLIENT_RELEASE_STORE_PASSWORD XBCLIENT_RELEASE_KEY_ALIAS XBCLIENT_RELEASE_KEY_PASSWORD; do
+            if [ -z "${!name}" ]; then
+              echo "::error::$name is empty or not available to this workflow"
+              exit 1
+            fi
+          done
+
+      - name: Prepare release keystore
+        shell: bash
+        run: |
+          export XBCLIENT_RELEASE_STORE_FILE="$RUNNER_TEMP/xbclient-release-signing.jks"
+          echo "XBCLIENT_RELEASE_STORE_FILE=$XBCLIENT_RELEASE_STORE_FILE" >> "$GITHUB_ENV"
+          printf '%s' "$XBCLIENT_RELEASE_STORE_BASE64" | base64 -d > "$XBCLIENT_RELEASE_STORE_FILE"
+
       - name: Build Release APK
         run: |
-          ./gradlew :app:assembleRelease \
-            -PversionName=1.0.0 \
-            -PversionCode=1 \
-            --stacktrace
+          ./gradlew :apps:android:assembleRelease --build-cache --stacktrace
+
+      - name: Rename APK
+        shell: bash
+        run: |
+          apk="$(find apps/android/build/outputs/apk/release -maxdepth 1 -type f -name '*-arm64-v8a-release.apk' -print -quit)"
+          test -n "$apk"
+          mv "$apk" "apps/android/build/outputs/apk/release/${XBCLIENT_APP_NAME}-arm64-v8a-release-${GITHUB_RUN_ID}.apk"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: BBcloud-Release-APK
-          path: apps/android/app/build/outputs/apk/release/app-release.apk
+          name: BBcloud-Release-APK-${{ github.run_id }}
+          path: apps/android/build/outputs/apk/release/${{ env.XBCLIENT_APP_NAME }}-arm64-v8a-release-${{ github.run_id }}.apk
           retention-days: 7
-
-      - name: Upload Build Log
-        uses: actions/upload-artifact@v4
-        with:
-          name: Build-Log
-          path: apps/android/app/build/outputs/apk/release/app-release.apk.log
