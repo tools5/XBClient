@@ -1243,7 +1243,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         generateSequence<Throwable>(error) { it.cause }
             .any { it.message?.contains("HTTP 404", ignoreCase = true) == true }
 
-    private fun disableOptionalAdFeatures() {
+    private suspend fun disableOptionalAdFeatures() {
         val next = _uiState.value.copy(
             paymentEnabled = false,
             planRewardAdEnabled = false,
