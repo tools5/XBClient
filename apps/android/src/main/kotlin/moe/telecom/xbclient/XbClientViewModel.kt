@@ -598,15 +598,16 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 var subscriptionRouteConfigYaml = ""
                 var subscriptionRouteRuleCount = 0
                 var subscriptionRouteRulesPreview = emptyList<String>()
-                var metaNodesResult: JSONObject? = null
+                var subscriptionNodes = emptyList<AnyTlsNode>()
                 if (blockReason.isEmpty() && subscribeUrl.isNotEmpty()) {
-                    metaNodesResult = XboardApi.request(
+                    val metaNodesResult = XboardApi.request(
                         "anytls_nodes",
                         defaultApiUrl(),
                         "",
                         JSONObject().put("subscribe_url", subscribeUrl).put("flag", "meta")
                     )
                     if (metaNodesResult.getBoolean("ok")) {
+                        subscriptionNodes = metaNodesResult.getJSONArray("nodes").toAnyTlsNodeList()
                         val routing = metaNodesResult.getJSONObject("routing")
                         subscriptionRouteConfigYaml = if (routing.isNull("route_config_yaml")) "" else routing.getString("route_config_yaml")
                         subscriptionRouteRuleCount = routing.getInt("rule_count")
@@ -617,18 +618,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                         throw IllegalStateException(resultError(metaNodesResult))
                     }
                 }
-                val baseNodes = if (blockReason.isEmpty()) {
-                    val xbclientNodesResult = XboardApi.request("xbclient_nodes", defaultApiUrl(), current.authData, JSONObject())
-                    if (xbclientNodesResult.getBoolean("ok")) {
-                        val nodesBody = requireSuccessfulBody("XBClient 节点同步", xbclientNodesResult)
-                        nodesBody.getJSONObject("data").getJSONArray("nodes").toAnyTlsNodeList()
-                    } else {
-                        throw IllegalStateException(resultError(xbclientNodesResult))
-                    }
-                } else {
-                    emptyList()
-                }
-                val nodes = baseNodes
+                val nodes = if (blockReason.isEmpty()) subscriptionNodes else emptyList()
                 val selectedIndex = _uiState.value.selectedNodeIndex.coerceIn(0, (nodes.size - 1).coerceAtLeast(0))
                 val firstConnectableIndex = nodes.indexOfFirst { it.connectSupported }
                 val next = _uiState.value.copy(

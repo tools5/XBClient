@@ -19,7 +19,7 @@ import java.util.concurrent.TimeUnit
 
 object XboardApi {
     private const val SUBSCRIPTION_USER_AGENT = "mihomo"
-    private const val SUBSCRIPTION_NODE_TYPES = "anytls,hysteria,trojan,vless,vmess,mieru,naive,shadowsocks,tuic,http,socks5,direct,block"
+    private const val SUBSCRIPTION_NODE_TYPES = "anytls,hysteria,hysteria2,trojan,vless,vmess,mieru,naive,shadowsocks,ss,tuic,http,socks5,direct,block"
     private val userAgent: String
         get() = BuildConfig.USER_AGENT
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -256,6 +256,7 @@ object XboardApi {
         for ((key, value) in parsedRoot) {
             root[key] = value
         }
+        val nodes = clashProxyNodes(root["proxies"])
         val rules = (root["rules"] as? List<*>
             ?: throw IllegalStateException("clash-meta routing YAML missing rules array"))
             .map { it.toString() }
@@ -310,6 +311,7 @@ object XboardApi {
             .put("format", "clashmeta")
             .put("flag", flag)
             .put("subscription_userinfo", subscriptionUserInfo)
+            .put("nodes", nodes)
             .put("routing", JSONObject()
                 .put("has_rules", rules.isNotEmpty())
                 .put("rule_count", rules.size)
@@ -318,6 +320,48 @@ object XboardApi {
                 .put("rules_preview", JSONArray().also { array -> rules.take(20).forEach { array.put(it) } })
                 .put("route_config_yaml", routeConfigYaml)
             )
+    }
+
+    private fun clashProxyNodes(value: Any?): JSONArray {
+        val proxies = value as? List<*>
+            ?: throw IllegalStateException("clash-meta subscription YAML missing proxies array")
+        return JSONArray().also { nodes ->
+            for ((index, rawProxy) in proxies.withIndex()) {
+                val proxy = rawProxy as? Map<*, *>
+                    ?: throw IllegalStateException("clash-meta proxy #${index + 1} must be a mapping")
+                val node = yamlMapToJson(proxy)
+                if (!node.has("host") && node.has("server")) {
+                    node.put("host", node.get("server"))
+                }
+                for (requiredKey in arrayOf("type", "name", "host", "port")) {
+                    if (!node.has(requiredKey) || node.isNull(requiredKey) || node.optString(requiredKey).isBlank()) {
+                        throw IllegalStateException("clash-meta proxy #${index + 1} missing $requiredKey")
+                    }
+                }
+                nodes.put(node)
+            }
+        }
+    }
+
+    private fun yamlMapToJson(value: Map<*, *>): JSONObject = JSONObject().also { result ->
+        for ((rawKey, rawValue) in value) {
+            val key = rawKey?.toString()
+                ?: throw IllegalStateException("clash-meta YAML mapping key must not be null")
+            val jsonValue = yamlValueToJson(rawValue)
+            result.put(key, jsonValue)
+            val underscoreKey = key.replace('-', '_')
+            if (underscoreKey != key && !value.containsKey(underscoreKey)) {
+                result.put(underscoreKey, jsonValue)
+            }
+        }
+    }
+
+    private fun yamlValueToJson(value: Any?): Any = when (value) {
+        null -> JSONObject.NULL
+        is Map<*, *> -> yamlMapToJson(value)
+        is List<*> -> JSONArray().also { array -> value.forEach { array.put(yamlValueToJson(it)) } }
+        is String, is Number, is Boolean -> value
+        else -> value.toString()
     }
 
     private fun fetchMihomoRuleProviderPayload(name: String, provider: Map<*, *>, baseUrl: okhttp3.HttpUrl): List<String> {
