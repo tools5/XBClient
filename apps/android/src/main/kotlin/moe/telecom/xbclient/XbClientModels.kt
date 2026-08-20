@@ -631,8 +631,8 @@ fun extractDataArray(body: JSONObject): JSONArray {
 }
 
 fun subscriptionSummary(data: JSONObject): String {
-    val used = numericValue(data.get("u")) + numericValue(data.get("d"))
-    val total = numericValue(data.get("transfer_enable"))
+    val used = numericValueOrZero(data.opt("u")) + numericValueOrZero(data.opt("d"))
+    val total = numericValueOrZero(data.opt("transfer_enable"))
     val planValue = data.opt("plan")
     val plan = when (planValue) {
         null, JSONObject.NULL -> null
@@ -640,7 +640,7 @@ fun subscriptionSummary(data: JSONObject): String {
         else -> throw IllegalStateException("订阅套餐 plan 必须是对象。")
     }
     val planName = if (plan == null) "" else plan.getString("name")
-    val expire = numericValue(data.get("expired_at")).toLong()
+    val expire = numericValueOrZero(data.opt("expired_at")).toLong()
     val lines = ArrayList<String>()
     if (planName.isNotEmpty()) {
         lines.add(planName)
@@ -655,7 +655,7 @@ fun subscriptionSummary(data: JSONObject): String {
 }
 
 fun subscriptionBlockReason(data: JSONObject): String {
-    val planId = numericValue(data.get("plan_id")).toInt()
+    val planId = numericValueOrZero(data.opt("plan_id")).toInt()
     val planValue = data.opt("plan")
     val hasPlan = when (planValue) {
         null, JSONObject.NULL -> false
@@ -665,12 +665,12 @@ fun subscriptionBlockReason(data: JSONObject): String {
     if (planId <= 0 && !hasPlan) {
         return SUBSCRIPTION_BLOCK_NO_PLAN
     }
-    val expiredAt = numericValue(data.get("expired_at")).toLong()
+    val expiredAt = numericValueOrZero(data.opt("expired_at")).toLong()
     if (!data.isNull("expired_at") && expiredAt <= System.currentTimeMillis() / 1000L) {
         return SUBSCRIPTION_BLOCK_EXPIRED
     }
-    val total = numericValue(data.get("transfer_enable"))
-    if (total <= 0.0 || numericValue(data.get("u")) + numericValue(data.get("d")) >= total) {
+    val total = numericValueOrZero(data.opt("transfer_enable"))
+    if (total <= 0.0 || numericValueOrZero(data.opt("u")) + numericValueOrZero(data.opt("d")) >= total) {
         return SUBSCRIPTION_BLOCK_TRAFFIC
     }
     return ""
@@ -708,6 +708,11 @@ fun numericValue(value: Any?): Double = when (value) {
     is Number -> value.toDouble().also { require(it.isFinite()) { "numeric value is not finite" } }
     is String -> value.toDoubleOrNull() ?: throw IllegalStateException("numeric value is invalid: $value")
     else -> throw IllegalStateException("numeric value has unsupported type: ${value.javaClass.name}")
+}
+
+fun numericValueOrZero(value: Any?): Double = when (value) {
+    null, JSONObject.NULL -> 0.0
+    else -> numericValue(value)
 }
 
 fun formatTrafficGb(value: Double): String = if (value >= 1024.0) {
