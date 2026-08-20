@@ -1240,7 +1240,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
     }
 
     private fun isMissingOptionalAdApi(error: Throwable): Boolean =
-        generateSequence(error) { it.cause }
+        generateSequence<Throwable>(error) { it.cause }
             .any { it.message?.contains("HTTP 404", ignoreCase = true) == true }
 
     private fun disableOptionalAdFeatures() {
