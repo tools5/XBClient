@@ -1197,7 +1197,11 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             try {
                 loadRewardConfig(authData)
             } catch (error: Exception) {
-                emitMessage("广告配置加载失败：${error.message}")
+                if (isMissingOptionalAdApi(error)) {
+                    disableOptionalAdFeatures()
+                } else {
+                    emitMessage("广告配置加载失败：${error.message}")
+                }
             }
         }
     }
@@ -1226,9 +1230,32 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 if (showLoading) {
                     _uiState.update { it.copy(adRewardLogsLoading = false) }
                 }
-                emitMessage("广告奖励记录加载失败：${error.message}")
+                if (isMissingOptionalAdApi(error)) {
+                    _uiState.update { it.copy(adRewardLogs = emptyList()) }
+                } else {
+                    emitMessage("广告奖励记录加载失败：${error.message}")
+                }
             }
         }
+    }
+
+    private fun isMissingOptionalAdApi(error: Throwable): Boolean =
+        generateSequence(error) { it.cause }
+            .any { it.message?.contains("HTTP 404", ignoreCase = true) == true }
+
+    private fun disableOptionalAdFeatures() {
+        val next = _uiState.value.copy(
+            paymentEnabled = false,
+            planRewardAdEnabled = false,
+            pointsRewardAdEnabled = false,
+            appOpenAdEnabled = false,
+            planRewardedAdUnitId = "",
+            pointsRewardedAdUnitId = "",
+            appOpenAdUnitId = "",
+            adRewardLogs = emptyList()
+        )
+        _uiState.value = next
+        persistStoredState(next)
     }
 
     fun refreshUserInfo(showErrors: Boolean = false) {

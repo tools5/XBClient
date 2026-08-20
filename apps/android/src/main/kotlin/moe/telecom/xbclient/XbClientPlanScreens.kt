@@ -114,7 +114,7 @@ private fun PlanRow(
                 }
             }
         }
-        val content = plan.content.trim()
+        val content = plainNoticeText(plan.content)
         if (content.isNotEmpty() && !content.startsWith("[") && !content.startsWith("{")) {
             Spacer(Modifier.height(12.dp))
             Text(content, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)

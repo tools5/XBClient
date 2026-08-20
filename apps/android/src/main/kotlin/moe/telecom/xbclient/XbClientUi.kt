@@ -348,12 +348,17 @@ internal fun themeOptionLabel(mode: String, language: String): String {
 internal fun plainNoticeText(value: String): String =
     value
         .replace(Regex("<br\\s*/?>", RegexOption.IGNORE_CASE), "\n")
-        .replace(Regex("</p>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("</(p|div|li|h[1-6])>", RegexOption.IGNORE_CASE), "\n")
+        .replace(Regex("<(p|div|li|h[1-6])\\b[^>]*>", RegexOption.IGNORE_CASE), "")
         .replace(Regex("<[^>]+>"), "")
         .replace("&nbsp;", " ")
         .replace("&amp;", "&")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace(Regex("[ \\t]+\\n"), "\n")
+        .replace(Regex("\n{3,}"), "\n\n")
         .trim()
 
 internal fun visibleNodeTestText(text: String?): String? =
