@@ -100,42 +100,62 @@ object XboardApi {
         if (!resolver.startsWith("http://") && !resolver.startsWith("https://")) {
             throw IllegalStateException("节点 DNS 必须是 DoH 地址。")
         }
-        for (type in arrayOf("A", "AAAA")) {
-            val url = Uri.parse(resolver)
-                .buildUpon()
-                .appendQueryParameter("name", nodeHost)
-                .appendQueryParameter("type", type)
-                .build()
-                .toString()
-            val connection = (URL(url).openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 10000
-                readTimeout = 10000
-                setRequestProperty("User-Agent", userAgent)
-                setRequestProperty("Accept", "application/dns-json, application/json")
+        // Some IPv4-only networks still receive an IPv6 address for dns.alidns.com.
+        // Keep the configured endpoint first, then fall back to AliDNS's IPv4 HTTP
+        // endpoint when the HTTPS connection cannot be established.
+        val resolvers = buildList {
+            add(resolver)
+            if (resolver.contains("dns.alidns.com", ignoreCase = true)) {
+                add("http://223.5.5.5/resolve")
             }
-            val status = connection.responseCode
-            val text = readBody(connection)
-            if (status !in 200..299) {
-                throw IllegalStateException("节点 DNS 请求失败：HTTP $status")
-            }
-            val body = parseJson(text)
-            if (body !is JSONObject) {
-                throw IllegalStateException("节点 DNS 响应不是 JSON。")
-            }
-            val answers = when (val value = body.opt("Answer")) {
-                null, JSONObject.NULL -> continue
-                is JSONArray -> value
-                else -> throw IllegalStateException("节点 DNS 响应 Answer 必须是数组。")
-            }
-            for (index in 0 until answers.length()) {
-                val data = answers.getJSONObject(index).getString("data")
-                if (data.matches(Regex("^[0-9.]+$")) || data.matches(Regex("^[0-9A-Fa-f:.]+$")) && data.contains(":")) {
-                    return data
+        }.distinct()
+        var lastError: Exception? = null
+        for (currentResolver in resolvers) {
+            try {
+                for (type in arrayOf("A", "AAAA")) {
+                    val url = Uri.parse(currentResolver)
+                        .buildUpon()
+                        .appendQueryParameter("name", nodeHost)
+                        .appendQueryParameter("type", type)
+                        .build()
+                        .toString()
+                    val connection = (URL(url).openConnection() as HttpURLConnection).apply {
+                        requestMethod = "GET"
+                        connectTimeout = 10000
+                        readTimeout = 10000
+                        setRequestProperty("User-Agent", userAgent)
+                        setRequestProperty("Accept", "application/dns-json, application/json")
+                    }
+                    try {
+                        val status = connection.responseCode
+                        val text = readBody(connection)
+                        if (status !in 200..299) {
+                            throw IllegalStateException("节点 DNS 请求失败：HTTP $status")
+                        }
+                        val body = parseJson(text)
+                        if (body !is JSONObject) {
+                            throw IllegalStateException("节点 DNS 响应不是 JSON。")
+                        }
+                        val answers = when (val value = body.opt("Answer")) {
+                            null, JSONObject.NULL -> continue
+                            is JSONArray -> value
+                            else -> throw IllegalStateException("节点 DNS 响应 Answer 必须是数组。")
+                        }
+                        for (index in 0 until answers.length()) {
+                            val data = answers.getJSONObject(index).getString("data")
+                            if (data.matches(Regex("^[0-9.]+$")) || data.matches(Regex("^[0-9A-Fa-f:.]+$")) && data.contains(":")) {
+                                return data
+                            }
+                        }
+                    } finally {
+                        connection.disconnect()
+                    }
                 }
+            } catch (error: Exception) {
+                lastError = error
             }
         }
-        throw IllegalStateException("节点 DNS 无可用 A/AAAA 记录。")
+        throw IllegalStateException("节点 DNS 无法连接，请检查网络或更换 DNS。", lastError)
     }
 
     fun dnsAddressForVpn(value: String): String {
