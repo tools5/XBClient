@@ -113,7 +113,7 @@ private fun PlanRow(
         val content = plainNoticeText(plan.content)
         if (content.isNotEmpty() && !content.startsWith("[") && !content.startsWith("{")) {
             Spacer(Modifier.height(12.dp))
-            Text(content, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            NoticeMarkdownText(parseNoticeMarkdown(plan.content), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
         if (plan.prices.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))

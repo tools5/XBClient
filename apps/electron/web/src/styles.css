@@ -220,6 +220,17 @@ button {
   white-space: pre-wrap;
 }
 
+.notice-paragraph {
+  min-height: 1.5em;
+  overflow-wrap: anywhere;
+}
+
+.notice-link {
+  color: var(--primary);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
 .stack {
   display: grid;
   gap: 10px;

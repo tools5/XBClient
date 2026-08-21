@@ -165,12 +165,12 @@ internal fun NoticeCard(notice: NoticeItem) {
         if (notice.title.isNotBlank()) {
             Text(notice.title, style = MiuixTheme.textStyles.title2)
         }
-        val content = plainNoticeText(notice.content)
-        if (content.isNotBlank()) {
+        val paragraphs = parseNoticeMarkdown(notice.content)
+        if (paragraphs.isNotEmpty()) {
             if (notice.title.isNotBlank()) {
                 Spacer(Modifier.height(6.dp))
             }
-            Text(content, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            NoticeMarkdownText(paragraphs, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
         if (notice.createdAt > 0L) {
             Spacer(Modifier.height(8.dp))

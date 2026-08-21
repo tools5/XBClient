@@ -10,11 +10,13 @@ import {
 import { applyDesktopConnection, isDesktopConnectionShell } from '../../desktop/connection'
 import { onAeronEvent, reportVpnSession } from '../../platform/electron'
 import {
+  openInAppBrowser,
   parseSocksAddr,
   resolveAppNode,
   systemProxyClear,
   systemProxySet,
 } from '../../api/system'
+import { parseNoticeMarkdown, type NoticeSpan } from '../../notice-markdown'
 import DesktopConnectionPanel from '../components/DesktopConnectionPanel.vue'
 import SubscriptionBlockedPanel from '../components/SubscriptionBlockedPanel.vue'
 import { displayNodeName, dnsAddressForVpn } from '../../nodes'
@@ -162,8 +164,13 @@ async function toggleConnection(index = selectedNodeIndex.value) {
   }
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, '').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').trim()
+async function openNoticeLink(span: NoticeSpan) {
+  if (!span.href) return
+  try {
+    await openInAppBrowser(span.href, span.text)
+  } catch (err) {
+    error.value = publicErrorText(err)
+  }
 }
 
 function formatUnixTime(value: number): string {
@@ -282,7 +289,25 @@ function formatUnixTime(value: number): string {
         <v-card v-for="notice in appState.notices" :key="notice.id" class="panel-card">
           <v-card-text>
             <p v-if="notice.title" class="text-body-1 font-weight-bold">{{ notice.title }}</p>
-            <p class="muted preline">{{ stripHtml(notice.content) }}</p>
+            <p
+              v-for="(paragraph, paragraphIndex) in parseNoticeMarkdown(notice.content)"
+              :key="paragraphIndex"
+              class="muted notice-paragraph"
+            >
+              <template v-for="(span, spanIndex) in paragraph" :key="spanIndex">
+                <a
+                  v-if="span.href"
+                  class="notice-link"
+                  :class="{ 'font-weight-bold': span.bold }"
+                  role="link"
+                  tabindex="0"
+                  @click.prevent="openNoticeLink(span)"
+                  @keydown.enter.prevent="openNoticeLink(span)"
+                >{{ span.text }}</a>
+                <strong v-else-if="span.bold">{{ span.text }}</strong>
+                <span v-else>{{ span.text }}</span>
+              </template>
+            </p>
             <p v-if="notice.createdAt > 0" class="text-caption mt-2 text-medium-emphasis">
               {{ formatUnixTime(notice.createdAt) }}
             </p>
