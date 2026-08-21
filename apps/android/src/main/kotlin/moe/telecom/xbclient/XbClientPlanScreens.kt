@@ -32,7 +32,6 @@ import top.yukonga.miuix.kmp.utils.PressFeedbackType
 
 @Composable
 internal fun PlansScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
-    val context = LocalContext.current
     RewardAdSection(
         title = stringResource(R.string.reward_plan_title),
         enabled = state.planRewardAdEnabled,
@@ -60,9 +59,8 @@ internal fun PlansScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
                 currencySymbol = state.currencySymbol,
                 currencyUnit = state.currencyUnit,
                 noPriceText = noPriceText,
-                paymentEnabled = state.paymentEnabled,
-                onOpenPayment = { viewModel.openPlanPage(context, plan.id) },
-                onBalancePurchase = { price -> viewModel.buyPlanWithBalance(plan.id, price.field, price.amount) }
+                paymentLoading = state.paymentLoading,
+                onPurchase = { price -> viewModel.requestPlanPurchase(plan.id, price.field) }
             )
             if (index != state.plans.lastIndex) {
                 Spacer(Modifier.height(12.dp))
@@ -77,9 +75,8 @@ private fun PlanRow(
     currencySymbol: String,
     currencyUnit: String,
     noPriceText: String,
-    paymentEnabled: Boolean,
-    onOpenPayment: () -> Unit,
-    onBalancePurchase: (PlanPrice) -> Unit
+    paymentLoading: Boolean,
+    onPurchase: (PlanPrice) -> Unit
 ) {
     Card(
         modifier = Modifier
@@ -87,9 +84,8 @@ private fun PlanRow(
             .padding(horizontal = 12.dp)
             .animateContentSize(animationSpec = tween(180)),
         insideMargin = PaddingValues(18.dp),
-        pressFeedbackType = if (paymentEnabled) PressFeedbackType.Sink else PressFeedbackType.None,
-        showIndication = paymentEnabled,
-        onClick = if (paymentEnabled) onOpenPayment else null
+        pressFeedbackType = PressFeedbackType.None,
+        showIndication = false
     ) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             Column(Modifier.weight(1f)) {
@@ -99,7 +95,7 @@ private fun PlanRow(
                     Text(stringResource(R.string.plan_traffic, formatTrafficGb(plan.transferEnable)), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 }
             }
-            if (paymentEnabled || plan.prices.isEmpty()) {
+            if (plan.prices.isEmpty()) {
                 Spacer(Modifier.width(12.dp))
                 Card(
                     colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer),
@@ -119,10 +115,10 @@ private fun PlanRow(
             Spacer(Modifier.height(12.dp))
             Text(content, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
-        if (!paymentEnabled && plan.prices.isNotEmpty()) {
+        if (plan.prices.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
             for ((index, price) in plan.prices.withIndex()) {
-                Button(onClick = { onBalancePurchase(price) }, modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onPurchase(price) }, enabled = !paymentLoading, modifier = Modifier.fillMaxWidth()) {
                     Text("${planPriceLabel(price.field)} ${formatMoney(price.amount, currencySymbol, currencyUnit)}")
                 }
                 if (index != plan.prices.lastIndex) {

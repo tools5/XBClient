@@ -60,6 +60,11 @@ data class XbClientUiState(
     val currencySymbol: String = "",
     val currencyUnit: String = "",
     val plans: List<PlanItem> = emptyList(),
+    val paymentMethods: List<PaymentMethodItem> = emptyList(),
+    val paymentSheet: Boolean = false,
+    val paymentLoading: Boolean = false,
+    val pendingPlanId: Int = 0,
+    val pendingPlanPeriod: String = "",
     val anyTlsNodes: List<AnyTlsNode> = emptyList(),
     val notices: List<NoticeItem> = emptyList(),
     val selectedNodeIndex: Int = 0,
@@ -513,6 +518,10 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
 
     fun dismissUpdateDialog() {
         _uiState.update { it.copy(updateAvailable = false) }
+    }
+
+    fun dismissPaymentSheet() {
+        _uiState.update { it.copy(paymentSheet = false, paymentLoading = false, pendingPlanId = 0, pendingPlanPeriod = "") }
     }
 
     fun showNotices() {
@@ -1296,47 +1305,85 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun buyPlanWithBalance(planId: Int, period: String, amount: Int) {
+    fun requestPlanPurchase(planId: Int, period: String) {
         val authData = _uiState.value.authData
-        if (authData.isEmpty()) {
+        if (authData.isEmpty() || _uiState.value.paymentLoading) {
             return
         }
-        if (amount > _uiState.value.balance) {
-            emitMessage("账户金额不足，当前只允许账户金额足额抵扣。")
-            return
-        }
+        _uiState.update { it.copy(paymentLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val saveBody = requireSuccessfulBody(
-                    "创建订单",
+                val methods = requireSuccessfulBody(
+                    "支付方式",
                     XboardApi.request(
-                        "order_save",
+                        "payment_methods",
                         defaultApiUrl(),
                         authData,
                         JSONObject()
-                            .put("plan_id", planId)
-                            .put("period", period)
                     )
-                )
-                val tradeNo = saveBody.getString("data")
-                val checkoutBody = requireSuccessfulBody(
-                    "账户金额支付",
-                    XboardApi.request(
-                        "order_checkout",
-                        defaultApiUrl(),
-                        authData,
-                        JSONObject().put("trade_no", tradeNo)
+                ).getJSONArray("data")
+                val paymentMethods = List(methods.length()) { index ->
+                    val item = methods.getJSONObject(index)
+                    PaymentMethodItem(
+                        id = item.getInt("id"),
+                        name = item.optString("name").ifBlank { item.optString("payment", "支付方式") },
+                        handlingFeeFixed = item.optInt("handling_fee_fixed", 0),
+                        handlingFeePercent = item.optDouble("handling_fee_percent", 0.0)
                     )
-                )
-                if (checkoutBody.getInt("type") != -1) {
-                    throw IllegalStateException("订单未完成账户金额抵扣。")
                 }
-                emitMessage("账户金额支付成功。")
-                refreshSubscriptionAndNodes(force = true)
-                refreshUserInfo()
-                refreshPlans(force = true)
+                if (paymentMethods.isEmpty()) {
+                    throw IllegalStateException("站点暂未启用在线支付方式。")
+                }
+                _uiState.update {
+                    it.copy(
+                        paymentMethods = paymentMethods,
+                        paymentSheet = true,
+                        paymentLoading = false,
+                        pendingPlanId = planId,
+                        pendingPlanPeriod = period
+                    )
+                }
             } catch (error: Exception) {
-                emitMessage("账户金额支付失败：${error.message}")
+                _uiState.update { it.copy(paymentLoading = false) }
+                emitMessage("在线支付暂不可用：${error.message}")
+            }
+        }
+    }
+
+    fun checkoutPlanWithMethod(methodId: Int) {
+        val state = _uiState.value
+        if (state.authData.isEmpty() || state.pendingPlanId <= 0 || state.pendingPlanPeriod.isBlank() || state.paymentLoading) return
+        _uiState.update { it.copy(paymentLoading = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val saveBody = requireSuccessfulBody("创建订单", XboardApi.request(
+                    "order_save", defaultApiUrl(), state.authData,
+                    JSONObject().put("plan_id", state.pendingPlanId).put("period", state.pendingPlanPeriod)
+                ))
+                val checkoutBody = requireSuccessfulBody("发起支付", XboardApi.request(
+                    "order_checkout", defaultApiUrl(), state.authData,
+                    JSONObject().put("trade_no", saveBody.getString("data")).put("method", methodId)
+                ))
+                val type = checkoutBody.getInt("type")
+                val data = checkoutBody.optString("data")
+                dismissPaymentSheet()
+                when (type) {
+                    -1 -> {
+                        emitMessage("订单已由余额支付完成。")
+                        refreshSubscriptionAndNodes(force = true)
+                        refreshUserInfo()
+                        refreshPlans(force = true)
+                    }
+                    1 -> {
+                        if (!data.startsWith("https://") && !data.startsWith("http://")) throw IllegalStateException("支付链接无效。")
+                        emitEvent(XbClientEvent.OpenExternalUrl(data))
+                    }
+                    0 -> emitMessage("该支付方式返回扫码二维码，请在站点网页中完成扫码支付。")
+                    else -> throw IllegalStateException("不支持的支付响应。")
+                }
+            } catch (error: Exception) {
+                _uiState.update { it.copy(paymentLoading = false) }
+                emitMessage("发起在线支付失败：${error.message}")
             }
         }
     }

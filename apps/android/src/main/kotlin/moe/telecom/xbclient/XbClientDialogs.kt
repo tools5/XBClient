@@ -90,6 +90,26 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
         }
     }
     OverlayDialog(
+        show = state.paymentSheet,
+        title = "选择支付方式",
+        summary = "余额会由站点自动抵扣，剩余金额将跳转至所选支付方式。",
+        onDismissRequest = viewModel::dismissPaymentSheet
+    ) {
+        Column(modifier = Modifier.fillMaxWidth()) {
+            state.paymentMethods.forEachIndexed { index, method ->
+                Button(
+                    onClick = { viewModel.checkoutPlanWithMethod(method.id) },
+                    enabled = !state.paymentLoading,
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = if (index == 0) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors()
+                ) {
+                    Text(method.name)
+                }
+                if (index != state.paymentMethods.lastIndex) Spacer(Modifier.height(10.dp))
+            }
+        }
+    }
+    OverlayDialog(
         show = state.noticeDialog,
         title = stringResource(R.string.section_announcement),
         onDismissRequest = viewModel::dismissNotices

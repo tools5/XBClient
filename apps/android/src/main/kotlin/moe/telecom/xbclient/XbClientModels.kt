@@ -185,6 +185,13 @@ data class PlanPrice(
     val amount: Int
 )
 
+data class PaymentMethodItem(
+    val id: Int,
+    val name: String,
+    val handlingFeeFixed: Int,
+    val handlingFeePercent: Double
+)
+
 data class PlanItem(
     val id: Int,
     val name: String,
