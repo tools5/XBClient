@@ -357,19 +357,30 @@ fun JSONObject.toTicketMessageItem(): TicketMessageItem =
         updatedAt = numericValue(get("updated_at")).toLong()
     )
 
+// xiao/v2board 的 OAuth 提供方字段是 { provider, name }，XBoard 兼容接口是 { driver, label }
 fun JSONObject.toOAuthProvider(): OAuthProvider =
     OAuthProvider(
-        driver = getString("driver"),
-        label = getString("label")
+        driver = if (has("driver")) getString("driver") else getString("provider"),
+        label = if (has("label")) getString("label") else getString("name")
     )
 
+// Android 的 org.json 对显式 JSON null 调 optString 会返回字面量 "null"，必须先 isNull 判空
+private fun JSONObject.textOrEmpty(key: String): String =
+    if (isNull(key)) "" else optString(key)
+
+// xiao/v2board 只返回已绑定的行 { provider, name, provider_username, provider_email, ... }，
+// XBoard 兼容接口返回全部提供方 { driver, label, bound, ... }
 fun JSONObject.toOAuthBindingItem(): OAuthBindingItem =
     OAuthBindingItem(
-        driver = getString("driver"),
-        label = optString("label"),
-        bound = getBoolean("bound"),
-        identity = optString("email").ifEmpty { optString("name").ifEmpty { optString("nickname") } },
-        createdAt = optString("created_at")
+        driver = if (has("driver")) getString("driver") else getString("provider"),
+        label = if (has("driver")) textOrEmpty("label") else textOrEmpty("name"),
+        bound = if (has("bound")) getBoolean("bound") else true,
+        identity = textOrEmpty("provider_email").ifEmpty {
+            textOrEmpty("provider_username").ifEmpty {
+                textOrEmpty("email").ifEmpty { textOrEmpty("name").ifEmpty { textOrEmpty("nickname") } }
+            }
+        },
+        createdAt = textOrEmpty("created_at")
     )
 
 fun JSONObject.toGiftCardPreviewItem(): GiftCardPreviewItem {
@@ -442,8 +453,11 @@ fun JSONArray.toTicketItemList(): List<TicketItem> =
 fun JSONArray.toTicketMessageItemList(): List<TicketMessageItem> =
     List(length()) { index -> getJSONObject(index).toTicketMessageItem() }
 
+// Telegram Login Widget 只能在面板网页中使用，客户端的 redirect 流程会被面板拒绝
 fun JSONArray.toOAuthProviderList(): List<OAuthProvider> =
-    List(length()) { index -> getJSONObject(index).toOAuthProvider() }
+    List(length()) { index -> getJSONObject(index) }
+        .filter { it.optString("auth_type") != "telegram_login_widget" }
+        .map { it.toOAuthProvider() }
 
 fun JSONArray.toOAuthBindingItemList(): List<OAuthBindingItem> =
     List(length()) { index -> getJSONObject(index).toOAuthBindingItem() }

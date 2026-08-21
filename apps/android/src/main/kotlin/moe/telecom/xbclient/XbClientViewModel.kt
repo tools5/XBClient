@@ -405,13 +405,21 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 val body = requireSuccessfulBody("访客配置", result)
                 val data = body.getJSONObject("data")
                 val providers = data.getJSONArray("oauth_providers").toOAuthProviderList()
+                // xiao/v2board 用 is_recaptcha/is_cap 两个独立开关，XBoard 兼容接口用 is_captcha + captcha_type
+                val recaptchaOn = data.optInt("is_recaptcha") == 1
+                val capOn = data.optInt("is_cap") == 1
                 _uiState.update {
                     it.copy(
                         oauthProviders = providers,
                         inviteForce = data.getInt("is_invite_force") == 1,
                         registerEmailVerifyEnabled = data.getInt("is_email_verify") == 1,
-                        registerCaptchaEnabled = data.getInt("is_captcha") == 1,
-                        registerCaptchaType = data.getString("captcha_type")
+                        registerCaptchaEnabled = if (data.has("is_captcha")) data.getInt("is_captcha") == 1 else recaptchaOn || capOn,
+                        registerCaptchaType = when {
+                            data.has("is_captcha") -> data.getString("captcha_type")
+                            recaptchaOn -> "recaptcha"
+                            capOn -> "cap"
+                            else -> ""
+                        }
                     )
                 }
                 persistStoredState(_uiState.value)
@@ -2191,6 +2199,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 "turnstile" -> params.put("turnstile_token", token)
                 "recaptcha-v3" -> params.put("recaptcha_v3_token", token)
                 "recaptcha" -> params.put("recaptcha_data", token)
+                "cap" -> params.put("cap_data", token)
                 else -> throw IllegalStateException("不支持的验证码类型：$type")
             }
         }

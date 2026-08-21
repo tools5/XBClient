@@ -3,14 +3,18 @@ import { useAppStore } from '../store'
 import { parseOAuthProviders } from './helpers'
 import { xboardRequest } from './xboard'
 
+interface GuestConfigData {
+  oauth_providers?: unknown
+  is_invite_force?: number | boolean | string
+  is_email_verify?: number | boolean | string
+  is_captcha?: number | boolean | string
+  captcha_type?: unknown
+  is_recaptcha?: number | boolean | string
+  is_cap?: number | boolean | string
+}
+
 interface GuestConfigBody {
-  data?: {
-    oauth_providers?: unknown
-    is_invite_force?: number | boolean | string
-    is_email_verify?: number | boolean | string
-    is_captcha?: number | boolean | string
-    captcha_type?: unknown
-  }
+  data?: GuestConfigData
   message?: string
 }
 
@@ -28,7 +32,25 @@ export async function syncGuestAuthConfig(baseUrl: string): Promise<void> {
     oauthProviders: parseOAuthProviders(data.oauth_providers),
     inviteForce: enabled(data.is_invite_force),
     registerEmailVerifyEnabled: enabled(data.is_email_verify),
-    registerCaptchaEnabled: enabled(data.is_captcha),
-    registerCaptchaType: typeof data.captcha_type === 'string' ? data.captcha_type : (() => { throw new Error('guest config captcha_type is required') })(),
+    ...parseCaptchaConfig(data),
   })
+}
+
+// xiao/v2board exposes two independent captcha switches (is_recaptcha for Google
+// reCAPTCHA, is_cap for the self-hosted Cap widget), while the older
+// XBoard-compatible API uses is_captcha + captcha_type.
+function parseCaptchaConfig(data: GuestConfigData): { registerCaptchaEnabled: boolean; registerCaptchaType: string } {
+  if (data.is_captcha !== undefined) {
+    if (typeof data.captcha_type !== 'string') throw new Error('guest config captcha_type is required')
+    return { registerCaptchaEnabled: enabled(data.is_captcha), registerCaptchaType: data.captcha_type }
+  }
+  if (data.is_recaptcha === undefined && data.is_cap === undefined) {
+    throw new Error('guest config missing is_captcha, is_recaptcha and is_cap')
+  }
+  const recaptcha = data.is_recaptcha !== undefined && enabled(data.is_recaptcha)
+  const cap = data.is_cap !== undefined && enabled(data.is_cap)
+  return {
+    registerCaptchaEnabled: recaptcha || cap,
+    registerCaptchaType: recaptcha ? 'recaptcha' : cap ? 'cap' : '',
+  }
 }

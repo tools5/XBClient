@@ -44,6 +44,9 @@ export function parseInviteRows(value: unknown): InviteItem[] {
 
 export function parseOAuthProviders(value: unknown): OAuthProvider[] {
   return dataRows(value)
+    // Telegram Login Widget providers only work through the panel's web widget;
+    // the panel rejects them on the redirect flow the client uses.
+    .filter((item) => item.auth_type !== 'telegram_login_widget')
     .map((item) => {
       // xiao/v2board exposes OAuth providers as { provider, name }, while
       // the older XBoard-compatible API uses { driver, label }.

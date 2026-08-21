@@ -111,6 +111,10 @@ function putCaptchaParam(params: Record<string, string>) {
     params.recaptcha_data = token
     return
   }
+  if (type === 'cap') {
+    params.cap_data = token
+    return
+  }
   throw new Error(`unsupported captcha_type: ${type}`)
 }
 
