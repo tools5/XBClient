@@ -429,7 +429,8 @@ fun JSONObject.toPlanItem(): PlanItem {
     return PlanItem(
         id = getInt("id"),
         name = getString("name"),
-        content = getString("content"),
+        // 面板套餐说明可为 NULL
+        content = textOrEmpty("content"),
         transferEnable = numericValue(opt("transfer_enable")),
         prices = prices
     )

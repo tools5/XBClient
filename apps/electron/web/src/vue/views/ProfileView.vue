@@ -46,6 +46,36 @@ async function logout() {
   await router.replace('/login')
 }
 
+const giftCode = ref('')
+const giftRedeeming = ref(false)
+const giftMessage = ref('')
+
+async function redeemGiftCard() {
+  const code = giftCode.value.trim()
+  if (!code || giftRedeeming.value) return
+  giftRedeeming.value = true
+  giftMessage.value = ''
+  error.value = ''
+  try {
+    const response = await xboardRequest<{ data?: unknown; message?: string }>('gift_card_redeem', {
+      baseUrl: appState.baseUrl,
+      authData: appState.authData,
+      params: { giftcard: code },
+    })
+    if (!response.ok || response.body?.data !== true) {
+      error.value = failureText(response) || '礼品卡兑换失败'
+      return
+    }
+    giftCode.value = ''
+    giftMessage.value = t('gift_redeem_success')
+    await loadProfile()
+  } catch (err) {
+    error.value = publicErrorText(err)
+  } finally {
+    giftRedeeming.value = false
+  }
+}
+
 onMounted(loadProfile)
 </script>
 
@@ -96,6 +126,33 @@ onMounted(loadProfile)
             @click="router.push('/promotion')"
           >
             {{ t('nav_promotion') }}
+          </v-btn>
+        </v-card-text>
+      </v-card>
+    </div>
+
+    <div class="page-section">
+      <p class="section-label">{{ t('gift_card_title') }}</p>
+      <v-card class="panel-card">
+        <v-card-text>
+          <v-alert v-if="giftMessage" color="primary" variant="tonal" density="compact" class="mb-3">
+            {{ giftMessage }}
+          </v-alert>
+          <v-text-field
+            v-model="giftCode"
+            :label="t('gift_code')"
+            variant="outlined"
+            density="comfortable"
+          />
+          <v-btn
+            variant="tonal"
+            block
+            class="mt-2"
+            :loading="giftRedeeming"
+            :disabled="!giftCode.trim()"
+            @click="redeemGiftCard"
+          >
+            {{ giftRedeeming ? t('gift_redeeming') : t('gift_redeem') }}
           </v-btn>
         </v-card-text>
       </v-card>

@@ -408,27 +408,6 @@ private fun RegisterContent(state: XbClientUiState, viewModel: XbClientViewModel
                 onClick = viewModel::showLogin,
                 modifier = Modifier.fillMaxWidth()
             )
-            if (state.oauthConfirmToken.isNotEmpty()) {
-                Spacer(Modifier.height(14.dp))
-                Text(
-                    stringResource(R.string.auth_oauth_confirm_message, state.oauthConfirmProvider, state.oauthConfirmEmail),
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-                Spacer(Modifier.height(8.dp))
-                Button(
-                    onClick = viewModel::confirmOAuthRegister,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColorsPrimary()
-                ) {
-                    Text(stringResource(R.string.auth_oauth_confirm_button))
-                }
-                Spacer(Modifier.height(8.dp))
-                TextButton(
-                    text = stringResource(R.string.auth_oauth_cancel),
-                    onClick = viewModel::clearOAuthConfirm,
-                    modifier = Modifier.fillMaxWidth()
-                )
-            }
             if (state.oauthProviders.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))
                 for (provider in state.oauthProviders) {

@@ -2,7 +2,7 @@ import { failureText } from './api/helpers'
 import { subscriptionFetch, xboardRequest, type XboardBody } from './api/xboard'
 import { formatTrafficBytes, formatUnixDate, numericValue } from './format'
 import { translate, type TranslationKey } from './i18n'
-import { rawNodeRows, toAppNode } from './nodes'
+import { toAppNode, type RawNode } from './nodes'
 import { useAppStore, type AppNode, type NoticeItem, type SubscriptionState } from './store'
 import { saveSubscriptionCache } from './store/persist'
 
@@ -33,15 +33,17 @@ function parseNotices(body: NoticeFetchBody | undefined): NoticeItem[] {
 
 function subscriptionState(data: Record<string, unknown>, language: string): SubscriptionState {
   for (const key of ['u', 'd', 'transfer_enable', 'expired_at', 'plan_id']) {
-    if (data[key] === undefined || data[key] === null) throw new Error(`订阅同步响应缺少 ${key}。`)
+    if (!(key in data)) throw new Error(`订阅同步响应缺少 ${key}。`)
   }
-  const used = numericValue(data.u) + numericValue(data.d)
-  const total = numericValue(data.transfer_enable)
+  // 面板对无套餐/一次性/长期订阅返回 null（plan_id、expired_at 等），按 0 处理
+  const field = (key: string): number => (data[key] === null ? 0 : numericValue(data[key]))
+  const used = field('u') + field('d')
+  const total = field('transfer_enable')
   const plan = data.plan && typeof data.plan === 'object' ? (data.plan as Record<string, unknown>) : null
   if (plan && typeof plan.name !== 'string') throw new Error('订阅套餐缺少 name。')
   const planName = plan ? (plan.name as string) : ''
-  const expiredAt = numericValue(data.expired_at)
-  const planId = numericValue(data.plan_id)
+  const expiredAt = field('expired_at')
+  const planId = field('plan_id')
   return {
     summary: [
       planName,
@@ -71,9 +73,11 @@ export async function syncSubscription(): Promise<string | null> {
   if (!sub.body?.data || typeof sub.body.data !== 'object') throw new Error('订阅同步响应缺少 data。')
   const data = sub.body.data as Record<string, unknown>
   const url = typeof data.subscribe_url === 'string' ? data.subscribe_url : ''
+  const nextSubscription = subscriptionState(data, language)
   let list: AppNode[] = []
   let metaSubscription: Awaited<ReturnType<typeof subscriptionFetch>> | null = null
-  if (url) {
+  // 被封禁/过期/无套餐用户的订阅地址会返回空内容，先判定 blockReason 再抓订阅
+  if (url && !nextSubscription.blockReason) {
     metaSubscription = await subscriptionFetch(url, 'meta')
     if (!metaSubscription.ok) {
       if (!metaSubscription.error) throw new Error('订阅规则同步失败但缺少 error 字段。')
@@ -89,12 +93,11 @@ export async function syncSubscription(): Promise<string | null> {
       rulesPreview: routing.rules_preview,
       routeConfigYaml: typeof routing.route_config_yaml === 'string' ? routing.route_config_yaml : null,
     })
+    // 节点来自订阅 YAML 的 proxies（面板没有 XBoard 的 admob 节点接口）
+    if (!Array.isArray(metaSubscription.nodes)) throw new Error('订阅响应缺少 nodes 数组。')
+    list = (metaSubscription.nodes as RawNode[]).map(toAppNode)
   }
-  const xbclientNodes = await xboardRequest<XboardBody>('xbclient_nodes', { baseUrl: state.baseUrl, authData: state.authData })
-  if (!xbclientNodes.ok) return failureText(xbclientNodes)
-  list = rawNodeRows(xbclientNodes.body?.data).map(toAppNode)
 
-  const nextSubscription = subscriptionState(data, language)
   state.setSubscribe({ subscribeUrl: url, nodes: list })
   state.setSubscriptionState(nextSubscription)
   await saveSubscriptionCache({
@@ -105,7 +108,8 @@ export async function syncSubscription(): Promise<string | null> {
     routing: useAppStore.getState().routing,
   })
 
-  const noticeResponse = await xboardRequest<NoticeFetchBody>('notices', { baseUrl: state.baseUrl, authData: state.authData })
+  // 面板公告默认分页 5 条，显式取到上限
+  const noticeResponse = await xboardRequest<NoticeFetchBody>('notices', { baseUrl: state.baseUrl, authData: state.authData, params: { pageSize: 100 } })
   if (!noticeResponse.ok) return failureText(noticeResponse)
   state.setNotices(parseNotices(noticeResponse.body))
   return null

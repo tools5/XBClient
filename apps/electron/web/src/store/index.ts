@@ -151,6 +151,7 @@ interface AppState {
   inviteCommissionBalance: number
   oauthProviders: OAuthProvider[]
   registerEmailVerifyEnabled: boolean
+  registerEmailMode: 'code' | 'link'
   registerCaptchaEnabled: boolean
   registerCaptchaType: string
   adRewardLogs: AdRewardLogItem[]
@@ -199,6 +200,7 @@ interface AppState {
     | 'oauthProviders'
     | 'inviteForce'
     | 'registerEmailVerifyEnabled'
+    | 'registerEmailMode'
     | 'registerCaptchaEnabled'
     | 'registerCaptchaType'
   >>): void
@@ -294,6 +296,7 @@ const initialState: AppState = {
   inviteCommissionBalance: 0,
   oauthProviders: [],
   registerEmailVerifyEnabled: false,
+  registerEmailMode: 'code',
   registerCaptchaEnabled: false,
   registerCaptchaType: '',
   adRewardLogs: [],
@@ -369,6 +372,7 @@ const initialState: AppState = {
       inviteCommissionBalance: 0,
       oauthProviders: [],
       registerEmailVerifyEnabled: false,
+      registerEmailMode: 'code',
       registerCaptchaEnabled: false,
       registerCaptchaType: '',
       adRewardLogs: [],

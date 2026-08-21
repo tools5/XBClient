@@ -50,7 +50,8 @@ function parsePlan(raw: RawPlan): PlanItem {
   return {
     id: numericValue(raw.id),
     name: typeof raw.name === 'string' ? raw.name : (() => { throw new Error('plan name is required') })(),
-    content: typeof raw.content === 'string' ? raw.content.replace(/<[^>]+>/g, '') : (() => { throw new Error('plan content is required') })(),
+    // 面板套餐说明可为 NULL，按空处理（模板已对空 content 做了隐藏）
+    content: typeof raw.content === 'string' ? raw.content.replace(/<[^>]+>/g, '') : '',
     transferEnable: numericValue(raw.transfer_enable),
     prices,
   }
@@ -93,6 +94,23 @@ async function loadPlans() {
 async function loadClientConfig() {
   store().setRewardLogs([])
   const response = await xboardRequest<XboardBody>('admob_reward_config', { baseUrl: appState.baseUrl, authData: appState.authData })
+  if (!response.ok && response.status === 404) {
+    // 面板未安装 AdMob 插件：关闭广告与在线购买，走余额购买
+    store().setProfile({ paymentEnabled: false })
+    store().setAdmobConfig({
+      appOpenAdEnabled: false,
+      appOpenAdUnitId: '',
+      planRewardAdEnabled: false,
+      planRewardedAdUnitId: '',
+      planRewardSsvUserId: '',
+      planRewardSsvCustomData: '',
+      pointsRewardAdEnabled: false,
+      pointsRewardedAdUnitId: '',
+      pointsRewardSsvUserId: '',
+      pointsRewardSsvCustomData: '',
+    })
+    return
+  }
   if (!response.ok) throw new Error(failureText(response))
   if (!response.body?.data || typeof response.body.data !== 'object') throw new Error('admob_reward_config response missing data')
   const data = response.body.data as Record<string, unknown>
@@ -128,7 +146,16 @@ async function buy(plan: PlanItem, price: PlanPrice) {
     await openInAppBrowser(response.body.data, plan.name)
     return
   }
-  // Balance purchase
+  // 余额购买：面板 checkout 需要支付方式 id（余额在下单时自动抵扣，足额时返回 type -1）
+  const methods = await xboardRequest<XboardBody>('payment_methods', { baseUrl: appState.baseUrl, authData: appState.authData })
+  if (!methods.ok) {
+    error.value = failureText(methods)
+    return
+  }
+  // StripeCredit 需要客户端先取 stripe_token，桌面端没有实现，过滤掉
+  const methodRows = (Array.isArray(methods.body?.data) ? (methods.body.data as Array<Record<string, unknown>>) : [])
+    .filter((row) => String(row.payment ?? '') !== 'StripeCredit')
+  const methodId = methodRows.length ? Math.round(numericValue(methodRows[0].id)) : 0
   const response = await xboardRequest<{ data?: string; message?: string }>('order_save', {
     baseUrl: appState.baseUrl,
     authData: appState.authData,
@@ -139,17 +166,27 @@ async function buy(plan: PlanItem, price: PlanPrice) {
     return
   }
   const tradeNo = response.body.data
-  const checkout = await xboardRequest<{ type?: number; message?: string }>('order_checkout', {
+  const checkout = await xboardRequest<{ type?: number; data?: unknown; message?: string }>('order_checkout', {
     baseUrl: appState.baseUrl,
     authData: appState.authData,
-    params: { trade_no: tradeNo },
+    params: methodId > 0 ? { trade_no: tradeNo, method: methodId } : { trade_no: tradeNo },
   })
-  if (!checkout.ok || checkout.body?.type !== -1) {
-    error.value = !checkout.ok ? failureText(checkout) : 'order_checkout response type is not paid'
+  // -1=余额足额抵扣，2=网关即时扣款成功（如 Stripe），都视为已支付
+  if (checkout.ok && (checkout.body?.type === -1 || checkout.body?.type === 2)) {
+    message.value = t('balance_pay_success')
+    await loadPlans()
     return
   }
-  message.value = t('balance_pay_success')
-  await loadPlans()
+  if (checkout.ok && checkout.body?.type === 1 && typeof checkout.body.data === 'string') {
+    await openInAppBrowser(checkout.body.data, plan.name)
+    return
+  }
+  if (checkout.ok && checkout.body?.type === 0) {
+    message.value = '该支付方式需要扫码，请到网站的订单页完成支付。'
+    return
+  }
+  // checkout 已绑定支付方式，面板不允许再取消该订单，引导用户去网站处理
+  error.value = `${!checkout.ok ? failureText(checkout) : '不支持的支付响应'}（订单 ${tradeNo} 已创建，请到网站订单页完成支付或取消）`
 }
 
 function planPriceText(plan: PlanItem): string {

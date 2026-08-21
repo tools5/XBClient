@@ -19,11 +19,6 @@ interface AuthBody {
   message?: string
 }
 
-interface ConfirmOAuthBody {
-  data?: string
-  message?: string
-}
-
 const router = useRouter()
 const isDesktop = isDesktopShell()
 const mode = ref<AuthMode>('login')
@@ -39,8 +34,6 @@ const configLoading = ref(false)
 const forgotLoading = ref(false)
 const resetMode = ref(false)
 const verifySending = ref(false)
-const tokenLoading = ref(false)
-const oauthConfirm = ref<{ token: string; provider: string; email: string } | null>(null)
 
 const baseUrl = computed(() => {
   if (!appState.buildConfig?.default_api_url) throw new Error('XBCLIENT_DEFAULT_API_URL is required in build config')
@@ -123,6 +116,12 @@ async function submit() {
   message.value = ''
   error.value = ''
   try {
+    if (mode.value === 'register' && appState.registerEmailMode === 'link') {
+      // 面板 link 模式：注册只能通过邮箱链接在网页完成
+      await openInAppBrowser(`${normalizeBaseUrl(baseUrl.value)}/#/register`, t('register'))
+      message.value = t('email_link_mode_web_only')
+      return
+    }
     const params: Record<string, string> = { email: email.value.trim(), password: password.value }
     if (mode.value === 'register') {
       if (inviteCode.value.trim()) params.invite_code = inviteCode.value.trim()
@@ -153,6 +152,12 @@ async function submit() {
 }
 
 async function forgotPassword() {
+  if (appState.registerEmailMode === 'link') {
+    // 面板 link 模式：找回密码只能通过邮箱链接在网页完成
+    await openInAppBrowser(`${normalizeBaseUrl(baseUrl.value)}/#/forgot-password`, t('forgot_password'))
+    message.value = t('email_link_mode_web_only')
+    return
+  }
   const accountEmail = email.value.trim()
   if (!accountEmail) {
     error.value = t('email_required')
@@ -197,6 +202,8 @@ async function sendEmailVerify() {
   message.value = ''
   try {
     const params: Record<string, string> = { email: email.value.trim() }
+    // 面板用 isforget 区分找回密码与注册的验证码发送
+    if (resetMode.value) params.isforget = '1'
     putCaptchaParam(params)
     const response = await xboardRequest<{ message?: string }>('send_email_verify', { baseUrl: baseUrl.value, params })
     if (!response.ok) {
@@ -251,19 +258,6 @@ async function checkOAuthCallback() {
     message.value = oauthSuccess
     return
   }
-  const confirmToken = uri.searchParams.get('oauth_confirm_token')
-  if (confirmToken) {
-    const provider = uri.searchParams.get('oauth_provider')
-    const accountEmail = uri.searchParams.get('oauth_email')
-    if (!provider || !accountEmail) throw new Error('OAuth confirm callback missing provider or email')
-    mode.value = 'register'
-    oauthConfirm.value = {
-      token: confirmToken,
-      provider,
-      email: accountEmail,
-    }
-    return
-  }
   const verify = uri.searchParams.get('verify')
   if (verify) await loginWithVerify(verify)
 }
@@ -271,27 +265,6 @@ async function checkOAuthCallback() {
 function verifyFromCallback(value: string): string {
   const matched = /[?&](?:verify|token)=([^&]+)/.exec(value.trim())
   return matched ? decodeURIComponent(matched[1]) : value.trim()
-}
-
-async function confirmOAuthRegister() {
-  if (!oauthConfirm.value) return
-  tokenLoading.value = true
-  try {
-    const response = await xboardRequest<ConfirmOAuthBody>('confirm_oauth_register', {
-      baseUrl: baseUrl.value,
-      params: { token: oauthConfirm.value.token },
-    })
-    if (!response.ok) {
-      error.value = failureText(response)
-      return
-    }
-    if (typeof response.body?.data !== 'string' || !response.body.data.trim()) throw new Error('OAuth confirm response missing data')
-    await loginWithVerify(verifyFromCallback(response.body.data))
-  } catch (err) {
-    error.value = publicErrorText(err)
-  } finally {
-    tokenLoading.value = false
-  }
 }
 
 async function loginWithVerify(verify: string) {
@@ -435,7 +408,7 @@ async function finishLogin(authData: string, accountEmail: string) {
       </v-card>
 
       <v-card
-        v-if="oauthCallbackSupported && (appState.oauthProviders.length || oauthConfirm || configLoading)"
+        v-if="oauthCallbackSupported && (appState.oauthProviders.length || configLoading)"
         class="auth-oauth-card panel-card"
       >
         <v-card-text>
@@ -454,12 +427,6 @@ async function finishLogin(authData: string, accountEmail: string) {
               {{ mode === 'login' ? t('oauth_login') : t('oauth_register') }} · {{ provider.label }}
             </v-btn>
           </div>
-          <v-alert v-if="oauthConfirm" color="primary" variant="tonal" density="compact" class="mt-3">
-            {{ t('oauth_confirm_register') }} · {{ oauthConfirm.provider }}：{{ oauthConfirm.email }}
-            <v-btn class="ml-2" size="small" :loading="tokenLoading" @click="confirmOAuthRegister">
-              {{ t('confirm') }}
-            </v-btn>
-          </v-alert>
         </v-card-text>
       </v-card>
 

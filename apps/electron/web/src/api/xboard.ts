@@ -31,9 +31,7 @@ const ACTIONS = {
   register: { method: 'POST', path: '/api/v1/passport/auth/register', auth: false },
   forget_password: { method: 'POST', path: '/api/v1/passport/auth/forget', auth: false },
   token_login: { method: 'GET', path: '/api/v1/passport/auth/token2Login', auth: false, requiredQuery: ['verify'] },
-  confirm_oauth_register: { method: 'POST', path: '/api/v1/passport/auth/oauth/confirm-register', auth: false },
   passport_quick_login_url: { method: 'POST', path: '/api/v1/passport/auth/getQuickLoginUrl', auth: false },
-  login_with_mail_link: { method: 'POST', path: '/api/v1/passport/auth/loginWithMailLink', auth: false },
   user_info: { method: 'GET', path: '/api/v1/user/info', auth: true },
   user_subscribe: { method: 'GET', path: '/api/v1/user/getSubscribe', auth: true },
   check_login: { method: 'GET', path: '/api/v1/user/checkLogin', auth: true },
@@ -47,16 +45,15 @@ const ACTIONS = {
   plan_fetch: { method: 'GET', path: '/api/v1/user/plan/fetch', auth: true },
   order_save: { method: 'POST', path: '/api/v1/user/order/save', auth: true },
   order_checkout: { method: 'POST', path: '/api/v1/user/order/checkout', auth: true },
+  order_cancel: { method: 'POST', path: '/api/v1/user/order/cancel', auth: true },
+  payment_methods: { method: 'GET', path: '/api/v1/user/order/getPaymentMethod', auth: true },
   oauth_bindings: { method: 'GET', path: '/api/v1/user/oauth/bindings', auth: true },
   oauth_bind_prepare: { method: 'POST', path: (params) => `/api/v1/user/oauth/${pathParam(params, 'driver')}/bind`, auth: true },
   oauth_unbind: { method: 'POST', path: (params) => `/api/v1/user/oauth/${pathParam(params, 'driver')}/unbind`, auth: true },
   active_sessions: { method: 'GET', path: '/api/v1/user/getActiveSession', auth: true },
   remove_active_session: { method: 'POST', path: '/api/v1/user/removeActiveSession', auth: true },
-  gift_card_check: { method: 'POST', path: '/api/v1/user/gift-card/check', auth: true },
-  gift_card_redeem: { method: 'POST', path: '/api/v1/user/gift-card/redeem', auth: true },
-  gift_card_history: { method: 'GET', path: '/api/v1/user/gift-card/history', auth: true, query: ['page', 'per_page'] },
-  gift_card_detail: { method: 'GET', path: '/api/v1/user/gift-card/detail', auth: true, requiredQuery: ['id'] },
-  gift_card_types: { method: 'GET', path: '/api/v1/user/gift-card/types', auth: true },
+  // xiao/v2board 只有直接兑换接口（body: { giftcard }，成功返回 data: true）
+  gift_card_redeem: { method: 'POST', path: '/api/v1/user/redeemgiftcard', auth: true },
   invite_fetch: { method: 'GET', path: '/api/v1/user/invite/fetch', auth: true },
   invite_save: { method: 'GET', path: '/api/v1/user/invite/save', auth: true },
   invite_details: { method: 'GET', path: '/api/v1/user/invite/details', auth: true, query: ['current', 'page_size'] },
@@ -65,7 +62,7 @@ const ACTIONS = {
   ticket_reply: { method: 'POST', path: '/api/v1/user/ticket/reply', auth: true },
   ticket_close: { method: 'POST', path: '/api/v1/user/ticket/close', auth: true },
   ticket_withdraw: { method: 'POST', path: '/api/v1/user/ticket/withdraw', auth: true },
-  notices: { method: 'GET', path: '/api/v1/user/notice/fetch', auth: true },
+  notices: { method: 'GET', path: '/api/v1/user/notice/fetch', auth: true, query: ['pageSize'] },
   coupon_check: { method: 'POST', path: '/api/v1/user/coupon/check', auth: true },
   traffic_logs: { method: 'GET', path: '/api/v1/user/stat/getTrafficLog', auth: true },
   telegram_bot: { method: 'GET', path: '/api/v1/user/telegram/getBotInfo', auth: true },
@@ -75,7 +72,6 @@ const ACTIONS = {
   xbclient_plan_payment: { method: 'POST', path: '/api/v1/admob/user/plan-payment', auth: true },
   xbclient_reward_history: { method: 'GET', path: '/api/v1/admob/user/reward-history', auth: true },
   xbclient_reward_pending: { method: 'POST', path: '/api/v1/admob/user/reward-pending', auth: true },
-  xbclient_nodes: { method: 'GET', path: '/api/v1/admob/user/nodes', auth: true },
 } satisfies Record<string, ActionDef>
 
 export interface XboardOptions {
@@ -141,6 +137,7 @@ export interface SubscriptionResult {
   format?: string
   flag?: string
   subscription_userinfo?: string | null
+  nodes?: unknown
   routing?: SubscriptionRouting
   error?: string
   body?: string

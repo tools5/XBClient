@@ -3,7 +3,7 @@ use serde_json::{Map, Value, json};
 
 const SUBSCRIPTION_USER_AGENT: &str = "mihomo";
 const SUBSCRIPTION_NODE_TYPES: &str =
-    "anytls,hysteria,trojan,vless,vmess,mieru,naive,shadowsocks,tuic,http,socks5,direct,block";
+    "anytls,hysteria,hysteria2,trojan,vless,vmess,mieru,naive,shadowsocks,ss,tuic,http,socks5,direct,block";
 
 pub async fn fetch(client: &reqwest::Client, url: &str, flag: &str) -> Result<Value> {
     let sing_box = flag.eq_ignore_ascii_case("sing-box");
@@ -45,17 +45,23 @@ pub async fn fetch(client: &reqwest::Client, url: &str, flag: &str) -> Result<Va
             "body": text,
         }));
     }
-    let routing = if sing_box {
-        json!({
-            "has_rules": false,
-            "rule_count": 0,
-            "proxy_group_count": 0,
-            "rule_provider_count": 0,
-            "rules_preview": [],
-            "route_config_yaml": null,
-        })
+    let (routing, nodes) = if sing_box {
+        (
+            json!({
+                "has_rules": false,
+                "rule_count": 0,
+                "proxy_group_count": 0,
+                "rule_provider_count": 0,
+                "rules_preview": [],
+                "route_config_yaml": null,
+            }),
+            json!([]),
+        )
     } else {
-        clash_routing_meta(&text)?
+        let root: Value = serde_yaml::from_str::<serde_yaml::Value>(&text)
+            .context("parse clash-meta subscription YAML")
+            .and_then(yaml_to_json)?;
+        (clash_routing_meta(&root, &text)?, clash_proxy_nodes(&root)?)
     };
     Ok(json!({
         "ok": true,
@@ -63,6 +69,7 @@ pub async fn fetch(client: &reqwest::Client, url: &str, flag: &str) -> Result<Va
         "format": if sing_box { "sing-box" } else { "clashmeta" },
         "flag": flag,
         "subscription_userinfo": subscription_userinfo,
+        "nodes": nodes,
         "routing": routing,
     }))
 }
@@ -76,10 +83,47 @@ fn with_subscription_query(url: &str, flag: &str) -> Result<reqwest::Url> {
     Ok(parsed)
 }
 
-fn clash_routing_meta(text: &str) -> Result<Value> {
-    let root: Value = serde_yaml::from_str::<serde_yaml::Value>(text)
-        .context("parse clash-meta routing YAML")
-        .and_then(yaml_to_json)?;
+// 节点直接取订阅 YAML 的 proxies；面板（xiao/v2board）没有 XBoard 的 admob 节点接口。
+// 与 Android 端保持一致：server 补为 host，kebab-case 键补一份 snake_case 副本。
+fn clash_proxy_nodes(root: &Value) -> Result<Value> {
+    let proxies = root
+        .get("proxies")
+        .and_then(Value::as_array)
+        .context("clash-meta subscription YAML missing proxies array")?;
+    let mut nodes = Vec::with_capacity(proxies.len());
+    for (index, proxy) in proxies.iter().enumerate() {
+        let map = proxy
+            .as_object()
+            .with_context(|| format!("clash-meta proxy #{} must be a mapping", index + 1))?;
+        let mut node = Map::new();
+        for (key, value) in map {
+            node.insert(key.clone(), value.clone());
+            let underscore = key.replace('-', "_");
+            if underscore != *key && !map.contains_key(&underscore) {
+                node.insert(underscore, value.clone());
+            }
+        }
+        if !node.contains_key("host") {
+            if let Some(server) = node.get("server").cloned() {
+                node.insert("host".to_string(), server);
+            }
+        }
+        for required in ["type", "name", "host", "port"] {
+            let missing = match node.get(required) {
+                None | Some(Value::Null) => true,
+                Some(Value::String(text)) => text.trim().is_empty(),
+                Some(_) => false,
+            };
+            if missing {
+                bail!("clash-meta proxy #{} missing {required}", index + 1);
+            }
+        }
+        nodes.push(Value::Object(node));
+    }
+    Ok(Value::Array(nodes))
+}
+
+fn clash_routing_meta(root: &Value, text: &str) -> Result<Value> {
     let rules = root
         .get("rules")
         .and_then(Value::as_array)

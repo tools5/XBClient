@@ -11,6 +11,7 @@ interface GuestConfigData {
   captcha_type?: unknown
   is_recaptcha?: number | boolean | string
   is_cap?: number | boolean | string
+  register_email_mode?: unknown
 }
 
 interface GuestConfigBody {
@@ -32,6 +33,8 @@ export async function syncGuestAuthConfig(baseUrl: string): Promise<void> {
     oauthProviders: parseOAuthProviders(data.oauth_providers),
     inviteForce: enabled(data.is_invite_force),
     registerEmailVerifyEnabled: enabled(data.is_email_verify),
+    // xiao/v2board 独有：link 模式下注册/找回密码只能通过邮件链接（网页端）完成
+    registerEmailMode: data.register_email_mode === 'link' ? 'link' : 'code',
     ...parseCaptchaConfig(data),
   })
 }

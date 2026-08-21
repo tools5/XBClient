@@ -143,9 +143,6 @@ data class XbClientUiState(
     val registerEmailVerifyEnabled: Boolean = false,
     val registerCaptchaEnabled: Boolean = false,
     val registerCaptchaType: String = "",
-    val oauthConfirmToken: String = "",
-    val oauthConfirmProvider: String = "",
-    val oauthConfirmEmail: String = "",
     val oauthWebViewUrl: String = "",
     val rewardCreditedDialog: Boolean = false,
     val rewardCreditedContent: String = "",
@@ -480,49 +477,11 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             }
             return
         }
-        val confirmToken = uri.getQueryParameter("oauth_confirm_token")
-        if (!confirmToken.isNullOrEmpty()) {
-            val provider = uri.getQueryParameter("oauth_provider")
-                ?: throw IllegalStateException("OAuth confirm callback missing provider")
-            val email = uri.getQueryParameter("oauth_email")
-                ?: throw IllegalStateException("OAuth confirm callback missing email")
-            _uiState.update {
-                it.copy(
-                    authMode = AuthMode.REGISTER,
-                    oauthConfirmToken = confirmToken,
-                    oauthConfirmProvider = provider,
-                    oauthConfirmEmail = email
-                )
-            }
-            emitMessage("请确认 OAuth 注册。")
-            return
-        }
+        // 面板 OAuth 自动注册，不会下发 oauth_confirm_token
         val verify = uri.getQueryParameter("verify")
         if (!verify.isNullOrEmpty()) {
             completeOAuthLogin(verify)
         }
-    }
-
-    fun confirmOAuthRegister() {
-        val token = _uiState.value.oauthConfirmToken
-        if (token.isEmpty()) {
-            return
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val body = requireSuccessfulBody(
-                    "OAuth 注册确认",
-                    XboardApi.request("confirm_oauth_register", defaultApiUrl(), "", JSONObject().put("token", token))
-                )
-                completeOAuthLogin(verifyFromQuickLoginUrl(body.getString("data")))
-            } catch (error: Exception) {
-                emitMessage("OAuth 注册失败：${error.message}")
-            }
-        }
-    }
-
-    fun clearOAuthConfirm() {
-        _uiState.update { it.copy(oauthConfirmToken = "", oauthConfirmProvider = "", oauthConfirmEmail = "") }
     }
 
     fun dismissUpdateDialog() {
@@ -1333,13 +1292,15 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 ).getJSONArray("data")
                 val paymentMethods = List(methods.length()) { index ->
                     val item = methods.getJSONObject(index)
+                    // StripeCredit 需要客户端先取 stripe_token，应用内没有实现，过滤掉
+                    if (item.optString("payment") == "StripeCredit") return@List null
                     PaymentMethodItem(
                         id = item.getInt("id"),
                         name = item.optString("name").ifBlank { item.optString("payment", "支付方式") },
                         handlingFeeFixed = item.optInt("handling_fee_fixed", 0),
                         handlingFeePercent = item.optDouble("handling_fee_percent", 0.0)
                     )
-                }
+                }.filterNotNull()
                 if (paymentMethods.isEmpty()) {
                     throw IllegalStateException("站点暂未启用在线支付方式。")
                 }
@@ -1377,8 +1338,9 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 val data = checkoutBody.optString("data")
                 dismissPaymentSheet()
                 when (type) {
-                    -1 -> {
-                        emitMessage("订单已由余额支付完成。")
+                    // -1=余额足额抵扣，2=网关即时扣款成功（如 Stripe），都视为已支付
+                    -1, 2 -> {
+                        emitMessage("订单已支付完成。")
                         refreshSubscriptionAndNodes(force = true)
                         refreshUserInfo()
                         refreshPlans(force = true)
@@ -1407,10 +1369,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                     authMode = AuthMode.LOGIN,
                     screen = PassScreen.NODES,
                     authData = data.getString("auth_data"),
-                    subscribeToken = data.optString("token"),
-                    oauthConfirmToken = "",
-                    oauthConfirmProvider = "",
-                    oauthConfirmEmail = ""
+                    subscribeToken = data.optString("token")
                 )
                 _uiState.value = next
                 persistStoredState(next)
@@ -1426,14 +1385,6 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             }
         }
     }
-
-    private fun verifyFromQuickLoginUrl(url: String): String =
-        Regex("[?&]verify=([^&]+)")
-            .find(url)
-            ?.groupValues
-            ?.get(1)
-            ?.let(Uri::decode)
-            ?: throw IllegalStateException("快捷登录地址缺少 verify。")
 
     private suspend fun loadRewardConfig(authData: String, scene: String = REWARD_SCENE_PLAN): Triple<String, String, String> {
         val result = XboardApi.request("admob_reward_config", defaultApiUrl(), authData, JSONObject())

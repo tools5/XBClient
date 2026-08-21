@@ -211,14 +211,6 @@ function nodeTags(node: RawNode): string[] {
   return [...new Set(tags)]
 }
 
-export function rawNodeRows(value: unknown): RawNode[] {
-  if (value && typeof value === 'object') {
-    const object = value as Record<string, unknown>
-    if (Array.isArray(object.nodes)) return object.nodes as RawNode[]
-  }
-  throw new Error('XBClient 节点响应缺少 data.nodes 数组。')
-}
-
 function normalizeNodeHost(value: string): string {
   const host = value.trim()
   const inner = host.length > 2 && host.startsWith('[') && host.endsWith(']') ? host.slice(1, -1) : ''

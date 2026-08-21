@@ -36,9 +36,7 @@ object XboardApi {
             "register" -> post(normalizedBaseUrl, "/api/v1/passport/auth/register", "", params)
             "forget_password" -> post(normalizedBaseUrl, "/api/v1/passport/auth/forget", "", params)
             "token_login" -> requestJson("GET", normalizedBaseUrl, "/api/v1/passport/auth/token2Login", "", requiredQuery(params, "verify"), null)
-            "confirm_oauth_register" -> post(normalizedBaseUrl, "/api/v1/passport/auth/oauth/confirm-register", "", params)
             "passport_quick_login_url" -> post(normalizedBaseUrl, "/api/v1/passport/auth/getQuickLoginUrl", "", params)
-            "login_with_mail_link" -> post(normalizedBaseUrl, "/api/v1/passport/auth/loginWithMailLink", "", params)
             "user_info" -> getAuth(normalizedBaseUrl, "/api/v1/user/info", authData, emptyMap())
             "user_subscribe" -> getAuth(normalizedBaseUrl, "/api/v1/user/getSubscribe", authData, emptyMap())
             "guest_config" -> requestJson("GET", normalizedBaseUrl, "/api/v1/guest/comm/config", "", emptyMap(), null)
@@ -73,7 +71,8 @@ object XboardApi {
             "ticket_reply" -> postAuth(normalizedBaseUrl, "/api/v1/user/ticket/reply", authData, params)
             "ticket_close" -> postAuth(normalizedBaseUrl, "/api/v1/user/ticket/close", authData, params)
             "ticket_withdraw" -> postAuth(normalizedBaseUrl, "/api/v1/user/ticket/withdraw", authData, params)
-            "notices" -> getAuth(normalizedBaseUrl, "/api/v1/user/notice/fetch", authData, emptyMap())
+            // 面板公告默认分页 5 条，显式取到上限
+            "notices" -> getAuth(normalizedBaseUrl, "/api/v1/user/notice/fetch", authData, mapOf("pageSize" to "100"))
             "coupon_check" -> postAuth(normalizedBaseUrl, "/api/v1/user/coupon/check", authData, params)
             "traffic_logs" -> getAuth(normalizedBaseUrl, "/api/v1/user/stat/getTrafficLog", authData, emptyMap())
             "telegram_bot" -> getAuth(normalizedBaseUrl, "/api/v1/user/telegram/getBotInfo", authData, emptyMap())
@@ -85,7 +84,6 @@ object XboardApi {
             "xbclient_plan_payment" -> postAuth(normalizedBaseUrl, "/api/v1/admob/user/plan-payment", authData, params)
             "xbclient_reward_history" -> getAuth(normalizedBaseUrl, "/api/v1/admob/user/reward-history", authData, emptyMap())
             "xbclient_reward_pending" -> postAuth(normalizedBaseUrl, "/api/v1/admob/user/reward-pending", authData, params)
-            "xbclient_nodes" -> getAuth(normalizedBaseUrl, "/api/v1/admob/user/nodes", authData, emptyMap())
 
             // 非站点 API：订阅内容解析
             "anytls_nodes" -> fetchProxyNodes(params.getString("subscribe_url"), params.getString("flag"))
