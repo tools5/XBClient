@@ -157,6 +157,26 @@ async fn resolve_node_host(params: ResolveNodeHostRequest) -> Result<String> {
         return Err(anyhow!("节点 DNS 必须是 DoH 地址。"));
     }
 
+    // 部分 IPv4-only 网络解析 dns.alidns.com 会拿到 IPv6 地址导致 HTTPS 连不上，
+    // 与 Android 端保持一致：先用配置的地址，连接失败时回退 AliDNS 的 IPv4 HTTP 端点
+    let mut resolvers = vec![resolver.to_string()];
+    if resolver.to_ascii_lowercase().contains("dns.alidns.com") {
+        resolvers.push("http://223.5.5.5/resolve".to_string());
+    }
+
+    let mut last_error: Option<anyhow::Error> = None;
+    for current in &resolvers {
+        match doh_query(current, host, params.user_agent.as_deref()).await {
+            Ok(Some(ip)) => return Ok(ip),
+            // 解析服务可达但没有记录：这是权威结果，不再回退
+            Ok(None) => return Err(anyhow!("节点 DNS 无可用 A/AAAA 记录。")),
+            Err(error) => last_error = Some(error),
+        }
+    }
+    Err(last_error.unwrap_or_else(|| anyhow!("节点 DNS 无可用 A/AAAA 记录。")))
+}
+
+async fn doh_query(resolver: &str, host: &str, user_agent: Option<&str>) -> Result<Option<String>> {
     for record_type in ["A", "AAAA"] {
         let mut url = reqwest::Url::parse(resolver).with_context(|| "parse dns resolver URL")?;
         url.query_pairs_mut()
@@ -167,19 +187,14 @@ async fn resolve_node_host(params: ResolveNodeHostRequest) -> Result<String> {
             .get(url)
             .header("Accept", "application/dns-json, application/json");
 
-        if let Some(value) = params
-            .user_agent
-            .as_deref()
-            .map(|v| v.trim())
-            .filter(|v| !v.is_empty())
-        {
+        if let Some(value) = user_agent.map(|v| v.trim()).filter(|v| !v.is_empty()) {
             request = request.header("User-Agent", value);
         }
 
         let response = request
             .send()
             .await
-            .map_err(|error| anyhow!("节点 DNS 请求失败：{error}"))?;
+            .map_err(|error| anyhow!("节点 DNS 请求失败：{}", error_chain_text(&error)))?;
 
         let status = response.status();
         if !status.is_success() {
@@ -204,13 +219,24 @@ async fn resolve_node_host(params: ResolveNodeHostRequest) -> Result<String> {
         if let Some(answer) = body.answer {
             for item in answer {
                 if item.data.parse::<IpAddr>().is_ok() {
-                    return Ok(item.data);
+                    return Ok(Some(item.data));
                 }
             }
         }
     }
+    Ok(None)
+}
 
-    Err(anyhow!("节点 DNS 无可用 A/AAAA 记录。"))
+// reqwest 错误的 Display 只有一层（如 "error sending request for url"），
+// 真实原因（DNS 解析失败/连接被拒等）在 source 链里，逐层拼出来便于排查
+fn error_chain_text(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut text = error.to_string();
+    let mut source = error.source();
+    while let Some(cause) = source {
+        text.push_str(&format!("（{cause}）"));
+        source = cause.source();
+    }
+    text
 }
 
 async fn xboard_request(params: RpcParamsForXboardRequest) -> Result<XboardResponse> {
