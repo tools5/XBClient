@@ -22,6 +22,11 @@ const config = {
   oauthCallbackScheme: requiredSecret('XBCLIENT_OAUTH_CALLBACK_SCHEME'),
 }
 
+// 系统协议注册与面板深链都按小写匹配，大写 scheme 会静默收不到 OAuth 回调
+if (!/^[a-z][a-z0-9+.-]*$/.test(config.oauthCallbackScheme)) {
+  throw new Error(`XBCLIENT_OAUTH_CALLBACK_SCHEME 必须是全小写 URI scheme：${config.oauthCallbackScheme}`)
+}
+
 fs.mkdirSync(configDir, { recursive: true })
 fs.writeFileSync(buildConfigPath, `${JSON.stringify(config, null, 2)}\n`)
 console.log('wrote transient desktop build config from GitHub Actions Secrets')

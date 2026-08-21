@@ -3,6 +3,7 @@ package moe.telecom.xbclient
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.ComponentActivity
@@ -18,6 +19,7 @@ import kotlinx.coroutines.launch
 class AuthActivity : ComponentActivity() {
     private val viewModel: XbClientViewModel by viewModels()
     private var redirectedToMain = false
+    private var pendingOAuthUri: Uri? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,6 +42,13 @@ class AuthActivity : ComponentActivity() {
                         return@collect
                     }
                     applyEdgeToEdge(state.themeMode)
+                    pendingOAuthUri?.let { uri ->
+                        pendingOAuthUri = null
+                        dispatchOAuthUri(uri)
+                        if (redirectedToMain) {
+                            return@collect
+                        }
+                    }
                     if (state.isLoggedIn && state.languageOnboardingDone && state.vpnDisclosureDone && !redirectedToMain) {
                         redirectedToMain = true
                         startActivity(
@@ -66,6 +75,27 @@ class AuthActivity : ComponentActivity() {
     private fun handleLaunchIntent(intent: Intent?) {
         val uri = intent?.data
         if (uri?.scheme == BuildConfig.OAUTH_CALLBACK_SCHEME && uri.host == "oauth") {
+            if (viewModel.uiState.value.loaded) {
+                dispatchOAuthUri(uri)
+            } else {
+                pendingOAuthUri = uri
+            }
+        }
+    }
+
+    // 已登录时深链是绑定结果，必须交给 MainActivity 的 ViewModel 处理：
+    // 绑定发起时的 pendingOAuthState、绑定列表和提示收集器都在那个实例里，
+    // 本页的临时 ViewModel 处理会导致校验被跳过、绑定列表不刷新、提示丢失
+    private fun dispatchOAuthUri(uri: Uri) {
+        if (viewModel.uiState.value.isLoggedIn) {
+            redirectedToMain = true
+            startActivity(
+                Intent(this@AuthActivity, MainActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                    .setData(uri)
+            )
+            finish()
+        } else {
             viewModel.handleOAuthCallback(uri)
         }
     }

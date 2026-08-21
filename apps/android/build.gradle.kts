@@ -29,6 +29,10 @@ val userAgent = providers.environmentVariable("XBCLIENT_USER_AGENT").orNull
 val oauthCallbackScheme = providers.environmentVariable("XBCLIENT_OAUTH_CALLBACK_SCHEME").orNull
     ?.trim()?.takeIf { it.isNotEmpty() }
     ?: error("XBCLIENT_OAUTH_CALLBACK_SCHEME GitHub Secret is required")
+// intent-filter 和面板深链都按小写匹配，大写 scheme 会静默收不到回调
+require(oauthCallbackScheme.matches(Regex("[a-z][a-z0-9+.-]*"))) {
+    "XBCLIENT_OAUTH_CALLBACK_SCHEME must be a lowercase URI scheme, got: $oauthCallbackScheme"
+}
 val websiteUrl = providers.environmentVariable("XBCLIENT_WEBSITE_URL").orNull.orEmpty()
 val privacyPolicyUrl = providers.environmentVariable("XBCLIENT_PRIVACY_POLICY_URL").orNull.orEmpty()
 val userAgreementUrl = providers.environmentVariable("XBCLIENT_USER_AGREEMENT_URL").orNull.orEmpty()
