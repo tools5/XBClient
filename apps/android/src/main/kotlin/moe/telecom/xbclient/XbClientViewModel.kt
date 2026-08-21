@@ -242,6 +242,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             PassScreen.TICKETS -> refreshTickets(showLoading = true, showErrors = true)
             PassScreen.TICKET_DETAIL -> Unit
             PassScreen.PLANS -> Unit
+            PassScreen.GIFT_CARDS -> Unit
             PassScreen.NODE_SELECT -> refreshSubscriptionAndNodes()
             PassScreen.APP_RULES -> Unit
             PassScreen.OPEN_SOURCE_LICENSES -> Unit
@@ -282,7 +283,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 refreshSubscriptionAndNodes(force = true, showLoading = true, showErrors = true)
                 refreshUserInfo(showErrors = true)
             }
-            PassScreen.SETTINGS, PassScreen.APP_RULES, PassScreen.THEME -> refreshUserInfo(showErrors = true)
+            PassScreen.SETTINGS, PassScreen.APP_RULES, PassScreen.THEME, PassScreen.GIFT_CARDS -> refreshUserInfo(showErrors = true)
             PassScreen.OPEN_SOURCE_LICENSES -> Unit
             PassScreen.NODES -> {
                 refreshSubscriptionAndNodes(force = true, showLoading = true, showErrors = true)
