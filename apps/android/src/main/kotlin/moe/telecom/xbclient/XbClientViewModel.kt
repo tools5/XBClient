@@ -1456,7 +1456,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 pointsRewardedAdUnitId = pointsAdUnitId
             )
         }
-        persistStoredState(_uiState.value)
+        persistState(_uiState.value)
         val updateProjectUrl = BuildConfig.GITHUB_PROJECT_URL.trim()
         if (updateProjectUrl.isNotBlank()) {
             checkGithubReleaseUpdate(updateProjectUrl)
