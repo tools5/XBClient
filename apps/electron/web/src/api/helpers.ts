@@ -45,8 +45,10 @@ export function parseInviteRows(value: unknown): InviteItem[] {
 export function parseOAuthProviders(value: unknown): OAuthProvider[] {
   return dataRows(value)
     .map((item) => {
-      const driver = field(item, 'driver')
-      const label = field(item, 'label')
+      // xiao/v2board exposes OAuth providers as { provider, name }, while
+      // the older XBoard-compatible API uses { driver, label }.
+      const driver = field(item, 'driver' in item ? 'driver' : 'provider')
+      const label = field(item, 'label' in item ? 'label' : 'name')
       if (!driver || !label) throw new Error('oauth provider missing driver or label')
       return { driver, label }
     })
