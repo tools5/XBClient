@@ -228,7 +228,6 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(screen = screen) }
         when (screen) {
             PassScreen.PROFILE -> Unit
-            PassScreen.GIFT_CARDS -> refreshGiftCardHistory(showLoading = true, showErrors = true)
             PassScreen.ACCOUNT_SECURITY -> {
                 refreshOAuthProviders(showErrors = true)
                 refreshOAuthBindings(showLoading = true, showErrors = true)
@@ -257,7 +256,6 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                 refreshInvites(force = true, showLoading = true, showErrors = true)
                 refreshRewardConfig()
             }
-            PassScreen.GIFT_CARDS -> refreshGiftCardHistory(force = true, showLoading = true, showErrors = true)
             PassScreen.ACCOUNT_SECURITY -> {
                 refreshUserInfo(showErrors = true)
                 refreshOAuthProviders(showErrors = true)
@@ -828,77 +826,6 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun refreshGiftCardHistory(force: Boolean = false, showLoading: Boolean = false, showErrors: Boolean = false) {
-        val authData = _uiState.value.authData
-        if (authData.isEmpty() || _uiState.value.giftCardHistoryLoading) {
-            return
-        }
-        if (!force && _uiState.value.giftCardHistory.isNotEmpty()) {
-            return
-        }
-        if (showLoading) {
-            _uiState.update { it.copy(giftCardHistoryLoading = true) }
-        }
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val body = requireSuccessfulBody(
-                    "礼品卡记录",
-                    XboardApi.request(
-                        "gift_card_history",
-                        defaultApiUrl(),
-                        authData,
-                        JSONObject()
-                            .put("page", 1)
-                            .put("per_page", 20)
-                    )
-                )
-                _uiState.update {
-                    it.copy(
-                        giftCardHistory = body.getJSONArray("data").toGiftCardUsageItemList(),
-                        giftCardHistoryLoading = false
-                    )
-                }
-            } catch (error: Exception) {
-                if (showLoading) {
-                    _uiState.update { it.copy(giftCardHistoryLoading = false) }
-                }
-                if (showErrors) {
-                    emitMessage("礼品卡记录加载失败：${error.message}")
-                }
-            }
-        }
-    }
-
-    fun checkGiftCard(code: String) {
-        val authData = _uiState.value.authData
-        if (authData.isEmpty() || _uiState.value.giftCardChecking) {
-            return
-        }
-        _uiState.update { it.copy(giftCardChecking = true, giftCardPreview = null) }
-        viewModelScope.launch(Dispatchers.IO) {
-            try {
-                val body = requireSuccessfulBody(
-                    "礼品卡查询",
-                    XboardApi.request(
-                        "gift_card_check",
-                        defaultApiUrl(),
-                        authData,
-                        JSONObject().put("code", code.trim())
-                    )
-                )
-                _uiState.update {
-                    it.copy(
-                        giftCardPreview = body.getJSONObject("data").toGiftCardPreviewItem(),
-                        giftCardChecking = false
-                    )
-                }
-            } catch (error: Exception) {
-                _uiState.update { it.copy(giftCardChecking = false) }
-                emitMessage("礼品卡查询失败：${error.message}")
-            }
-        }
-    }
-
     fun redeemGiftCard(code: String) {
         val authData = _uiState.value.authData
         if (authData.isEmpty() || _uiState.value.giftCardRedeeming) {
@@ -913,16 +840,13 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                         "gift_card_redeem",
                         defaultApiUrl(),
                         authData,
-                        JSONObject().put("code", code.trim())
+                        JSONObject().put("giftcard", code.trim())
                     )
                 )
-                val data = body.getJSONObject("data")
-                val rewardText = giftCardRewardText(data.getJSONObject("rewards"))
                 _uiState.update { it.copy(giftCardRedeeming = false, giftCardPreview = null) }
-                emitMessage("${data.getString("message")} $rewardText")
+                emitMessage("礼品卡兑换成功。")
                 refreshUserInfo()
                 refreshSubscriptionAndNodes(force = true)
-                refreshGiftCardHistory(force = true, showLoading = true, showErrors = true)
             } catch (error: Exception) {
                 _uiState.update { it.copy(giftCardRedeeming = false) }
                 emitMessage("礼品卡兑换失败：${error.message}")

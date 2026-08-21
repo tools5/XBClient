@@ -57,11 +57,13 @@ object XboardApi {
             "oauth_unbind" -> postAuth(normalizedBaseUrl, "/api/v1/user/oauth/${params.getString("driver")}/unbind", authData, JSONObject())
             "active_sessions" -> getAuth(normalizedBaseUrl, "/api/v1/user/getActiveSession", authData, emptyMap())
             "remove_active_session" -> postAuth(normalizedBaseUrl, "/api/v1/user/removeActiveSession", authData, params)
-            "gift_card_check" -> postAuth(normalizedBaseUrl, "/api/v1/user/gift-card/check", authData, params)
-            "gift_card_redeem" -> postAuth(normalizedBaseUrl, "/api/v1/user/gift-card/redeem", authData, params)
-            "gift_card_history" -> getAuth(normalizedBaseUrl, "/api/v1/user/gift-card/history", authData, optionalQuery(params, "page", "per_page"))
-            "gift_card_detail" -> getAuth(normalizedBaseUrl, "/api/v1/user/gift-card/detail", authData, requiredQuery(params, "id"))
-            "gift_card_types" -> getAuth(normalizedBaseUrl, "/api/v1/user/gift-card/types", authData, emptyMap())
+            // xiao/v2board only exposes a direct gift-card redemption endpoint.
+            "gift_card_redeem" -> postAuth(
+                normalizedBaseUrl,
+                "/api/v1/user/redeemgiftcard",
+                authData,
+                JSONObject().put("giftcard", params.getString("giftcard"))
+            )
             "invite_fetch" -> getAuth(normalizedBaseUrl, "/api/v1/user/invite/fetch", authData, emptyMap())
             "invite_save" -> getAuth(normalizedBaseUrl, "/api/v1/user/invite/save", authData, emptyMap())
             "invite_details" -> getAuth(normalizedBaseUrl, "/api/v1/user/invite/details", authData, emptyMap())

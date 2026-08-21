@@ -97,7 +97,7 @@ android {
         buildConfigField(
             "String",
             "GITHUB_PROJECT_URL",
-            "\"https://github.com/MoeclubM/XBClient\"",
+            "\"https://github.com/tools5/XBClient\"",
         )
     }
 

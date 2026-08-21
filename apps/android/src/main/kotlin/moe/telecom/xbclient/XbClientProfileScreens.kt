@@ -363,75 +363,13 @@ fun GiftCardsScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-                Button(
-                    onClick = { viewModel.checkGiftCard(code) },
-                    enabled = !state.giftCardChecking,
-                    modifier = Modifier.weight(1f)
-                ) {
-                    Text(stringResource(id = if (state.giftCardChecking) R.string.gift_checking else R.string.gift_check))
-                }
-                Button(
-                    onClick = { viewModel.redeemGiftCard(code) },
-                    enabled = !state.giftCardRedeeming,
-                    modifier = Modifier.weight(1f),
-                    colors = ButtonDefaults.buttonColorsPrimary()
-                ) {
-                    Text(stringResource(id = if (state.giftCardRedeeming) R.string.gift_redeeming else R.string.gift_redeem))
-                }
-            }
-            val preview = state.giftCardPreview
-            if (preview != null) {
-                Spacer(Modifier.height(14.dp))
-                HorizontalDivider()
-                Spacer(Modifier.height(12.dp))
-                Text(preview.templateName, style = MiuixTheme.textStyles.title2)
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    "${preview.typeName} · ${preview.statusName}",
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                )
-                Spacer(Modifier.height(6.dp))
-                Text(preview.rewardText, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                if (!preview.canRedeem) {
-                    Spacer(Modifier.height(6.dp))
-                    Text(preview.reason, color = MiuixTheme.colorScheme.error)
-                }
-            }
-        }
-    }
-    Section(stringResource(R.string.section_gift_history)) {
-        Panel {
-            when {
-                state.giftCardHistoryLoading -> Text(stringResource(R.string.gift_history_loading), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                state.giftCardHistory.isEmpty() -> Text(stringResource(R.string.gift_history_empty), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                else -> {
-                    for ((index, item) in state.giftCardHistory.withIndex()) {
-                        Text(item.templateName, style = MiuixTheme.textStyles.title2)
-                        Spacer(Modifier.height(4.dp))
-                        Text(
-                            listOf(item.code, item.typeName).filter { it.isNotEmpty() }.joinToString(" · "),
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-                        )
-                        Spacer(Modifier.height(4.dp))
-                        Text(item.rewardsText, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                        if (item.inviteRewardsText.isNotEmpty()) {
-                            Spacer(Modifier.height(2.dp))
-                            Text(stringResource(R.string.gift_invite_reward, item.inviteRewardsText), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                        }
-                        if (item.multiplierApplied != 1.0) {
-                            Spacer(Modifier.height(2.dp))
-                            Text(stringResource(R.string.gift_multiplier, String.format(Locale.US, "%.2f", item.multiplierApplied)), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                        }
-                        if (item.createdAt.isNotEmpty()) {
-                            Spacer(Modifier.height(2.dp))
-                            Text(item.createdAt, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
-                        }
-                        if (index != state.giftCardHistory.lastIndex) {
-                            HorizontalDivider(Modifier.padding(vertical = 12.dp))
-                        }
-                    }
-                }
+            Button(
+                onClick = { viewModel.redeemGiftCard(code) },
+                enabled = code.isNotBlank() && !state.giftCardRedeeming,
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.buttonColorsPrimary()
+            ) {
+                Text(stringResource(id = if (state.giftCardRedeeming) R.string.gift_redeeming else R.string.gift_redeem))
             }
         }
     }
