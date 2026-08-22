@@ -7,7 +7,7 @@ struct LoginView: View {
     @Binding var isLoggedIn: Bool
 
     /// 内置默认面板地址。域名变更时发版更新此值即可。
-    private static let defaultPanelURL = "https://dash.bbqaq.com"
+    private static let defaultPanelURL = "https://web.bbqaq.com"
 
     @State private var panelURL: String = Persistence.panelURL ?? LoginView.defaultPanelURL
     @State private var email = ""
