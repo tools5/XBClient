@@ -1,0 +1,46 @@
+name: iOS Core Check
+
+run-name: iOS Core Check · ${{ github.head_ref || github.ref_name }} · @${{ github.actor }} · #${{ github.run_number }}
+
+# aerion-core 引入 iOS 支持后的最小编译门禁：只验证 Rust 内核能为 aarch64-apple-ios
+# 交叉编译出静态库（含远程 git 依赖 aerion 是否支持 iOS 这一头号未知）。
+# 通过后再投入 Swift App/扩展与打包流程。
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'rust/**'
+      - '.github/workflows/ios-core-check.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-core-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ios-core:
+    name: aerion-core staticlib (aarch64-apple-ios)
+    runs-on: macos-14
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Add iOS Rust target
+        run: rustup target add aarch64-apple-ios
+
+      - name: Build aerion-core for iOS device
+        run: cargo build --release --target aarch64-apple-ios --manifest-path rust/aerion-core/Cargo.toml
+
+      - name: Confirm staticlib produced
+        run: |
+          set -e
+          LIB=$(find . -path '*aarch64-apple-ios/release/libaerion_core.a' | head -1)
+          test -n "$LIB"
+          ls -lh "$LIB"
+          lipo -info "$LIB" || true

@@ -6,7 +6,7 @@ license = "Apache-2.0"
 
 [lib]
 name = "aerion_core"
-crate-type = ["cdylib", "rlib"]
+crate-type = ["staticlib", "cdylib", "rlib"]
 
 [dependencies]
 aerion = { git = "https://github.com/MoeclubM/Aerion.git", rev = "e7c0e830a6dd382f3fd4d31e6070f458540913ae", default-features = false }

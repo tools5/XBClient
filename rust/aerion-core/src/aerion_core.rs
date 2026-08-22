@@ -125,7 +125,7 @@ fn traffic_direction_name(direction: aerion::TrafficDirection) -> &'static str {
 }
 
 #[derive(Deserialize)]
-#[cfg_attr(not(target_os = "android"), allow(dead_code))]
+#[cfg_attr(not(any(target_os = "android", target_os = "ios")), allow(dead_code))]
 struct StartVpnRequest {
     node: Value,
     tun_fd: Option<i32>,
@@ -251,7 +251,9 @@ pub async fn start_socks_from_json(input: &str) -> Result<String> {
         tokio::spawn(async move {
             while let Some(entry) = rx.recv().await {
                 on_log(&entry.level.to_string(), &entry.message);
-                #[cfg(not(target_os = "android"))]
+                // 移动端（Android/iOS）日志只走回调（Android 经 JNI，iOS 经 C 回调），
+                // 桌面端才额外投递到 log facade 供其日志后端捕获；iOS 无 log 后端，跳过避免空转
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 log::info!("[Aerion] [{}] {}", entry.level, entry.message);
             }
         })
@@ -263,7 +265,8 @@ pub async fn start_socks_from_json(input: &str) -> Result<String> {
             while let Some(event) = rx.recv().await {
                 let json = core_event_json(&event, Some(session_id));
                 on_event(&json);
-                #[cfg(not(target_os = "android"))]
+                // 同上：仅桌面端把事件镜像到 log facade，移动端只走回调
+                #[cfg(not(any(target_os = "android", target_os = "ios")))]
                 log::debug!("[Aerion Event] {}", json);
             }
         })
@@ -536,7 +539,10 @@ where
     }
 }
 
-#[cfg(target_os = "android")]
+// 移动端（Android/iOS）共用同一套基于 tun_fd 的实现：模块内部只依赖
+// spawn_tun/TunConfig/on_log/on_event/start_aerion_socks 与会话静态量，不含任何 JNI，
+// 因此 iOS 直接复用，避免重复实现（见 AGENTS.md「优先复用」）。
+#[cfg(any(target_os = "android", target_os = "ios"))]
 mod platform {
     use super::*;
     use aerion::{
@@ -578,14 +584,16 @@ mod platform {
 
         let tun_fd = request
             .tun_fd
-            .ok_or_else(|| anyhow::anyhow!("tun_fd is required on Android"))?;
+            .ok_or_else(|| anyhow::anyhow!("tun_fd is required for the mobile VPN path"))?;
 
         let mut tun_config = TunConfig::new(socks_proxy_url(socks_addr));
         tun_config.tun_fd = Some(tun_fd);
         tun_config.close_fd_on_drop = false;
         tun_config.setup = false;
         tun_config.mtu = mtu;
-        tun_config.packet_information = false;
+        // Android VpnService 的 fd 无包头（IFF_NO_PI）；iOS utun 每个包恒带 4 字节 AF 协议族包头，
+        // 必须让 tun2proxy 剥离/补齐，否则连上后零流量，故 iOS 置 true。
+        tun_config.packet_information = cfg!(target_os = "ios");
         tun_config.dns = dns;
         tun_config.dns_addr = dns_addr;
         tun_config.virtual_dns_pool = request.virtual_dns_pool;
@@ -954,7 +962,12 @@ mod platform {
     }
 }
 
-#[cfg(not(any(target_os = "android", target_os = "windows", target_os = "linux")))]
+#[cfg(not(any(
+    target_os = "android",
+    target_os = "ios",
+    target_os = "windows",
+    target_os = "linux"
+)))]
 mod platform {
     use super::*;
 
