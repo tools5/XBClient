@@ -22,7 +22,8 @@ struct HomeView: View {
 
     private var state: NEVPNStatus { appState.connectionState }
     private var isConnected: Bool { state == .connected }
-    private var canConnect: Bool { appState.selectedNode != nil }
+    // 直连模式不依赖节点列表，随时可连。
+    private var canConnect: Bool { appState.routingMode == .direct || appState.selectedNode != nil }
 
     var body: some View {
         NavigationStack {
@@ -30,7 +31,10 @@ struct HomeView: View {
                 VStack(spacing: 28) {
                     connectButton
                     statusBlock
-                    nodeCard
+                    VStack(spacing: 12) {
+                        nodeCard
+                        modeCard
+                    }
                     if isConnected { speedRow }
                     errorSection
                     Spacer(minLength: 0)
@@ -169,6 +173,43 @@ struct HomeView: View {
         .sheet(isPresented: $showNodePicker) {
             NodePickerSheet()
                 .environmentObject(appState)
+        }
+    }
+
+    // MARK: - 代理模式卡片（规则/全局/直连）
+
+    private var modeCard: some View {
+        Menu {
+            ForEach(RoutingMode.allCases) { mode in
+                Button {
+                    appState.setRoutingMode(mode)
+                } label: {
+                    if mode == appState.routingMode {
+                        Label(mode.title, systemImage: "checkmark")
+                    } else {
+                        Text(mode.title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "arrow.triangle.branch")
+                    .font(.title2)
+                    .foregroundStyle(.purple)
+                Text("代理模式")
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.primary)
+                Spacer(minLength: 0)
+                Text(appState.routingMode.title)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         }
     }
 

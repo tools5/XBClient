@@ -73,6 +73,11 @@ targets:
     sources:
       - path: PacketTunnel
       - path: Shared
+      # 路由资产（geoip/cn.txt，拷贝自 rust/aerion-core/assets/route/geoip）：
+      # 以文件夹引用整体进 appex bundle，扩展用 resourcePath/RouteAssets 作 geoip_dir。
+      - path: RouteAssets
+        type: folder
+        buildPhase: resources
     dependencies:
       # 系统框架/库：核心内含 rustls/ring TLS 与解析器，tun 栈可能用到 C++。
       - sdk: NetworkExtension.framework

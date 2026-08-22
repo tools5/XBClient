@@ -59,4 +59,24 @@ final class AerionBridge {
         defer { aerion_free_string(out) }
         return String(cString: out)
     }
+
+    // 规则分流：起本地 mihomo 路由 SOCKS。入参 StartRouteRequest JSON
+    // （config_yaml / selected_proxy / selected_node / geoip_dir），
+    // 返回 {"ok","session_id","socks_addr",...}。
+    func startRoute(json: String) -> String {
+        guard let out = aerion_start_route(json) else {
+            return #"{"ok":false,"error":"aerion_start_route returned null"}"#
+        }
+        defer { aerion_free_string(out) }
+        return String(cString: out)
+    }
+
+    // 停止路由会话：幂等。
+    func stopRoute(sessionId: Int64) -> String {
+        guard let out = aerion_stop_route(sessionId) else {
+            return #"{"ok":false,"error":"aerion_stop_route returned null"}"#
+        }
+        defer { aerion_free_string(out) }
+        return String(cString: out)
+    }
 }

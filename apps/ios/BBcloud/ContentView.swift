@@ -60,6 +60,9 @@ final class AppState: ObservableObject {
     @Published var latency: [String: NodeLatencyTester.Outcome] = [:]
     @Published var isTestingAll = false
 
+    // 路由模式（规则/全局/直连），持久化到 App Group 供扩展读取。
+    @Published var routingMode: RoutingMode = Persistence.routingMode
+
     private var cancellables = Set<AnyCancellable>()
 
     init() {
@@ -117,14 +120,44 @@ final class AppState: ObservableObject {
         Persistence.lastSelectedNodeId = id
     }
 
-    // 连接选中节点：走 connect(node:) 路径（App 侧先做 DNS 预解析）。
+    // 按路由模式连接：direct 用直连伪节点（不依赖节点列表）；rule/global 用选中节点，
+    // 并附上全部节点主机名供 TunnelController 预解析排除路由。
     func connect() async {
-        guard let node = selectedNode else { return }
-        await tunnel.connect(node: node)
+        if routingMode == .direct {
+            await tunnel.connect(nodeJSON: #"{"type":"direct","name":"DIRECT"}"#)
+            return
+        }
+        guard let node = selectedNode else {
+            nodeError = "请先选择节点"
+            return
+        }
+        await tunnel.connect(node: node, allHosts: nodes.map(\.host))
     }
 
     func disconnect() {
         tunnel.disconnect()
+    }
+
+    // 切换路由模式：立即持久化；已连接/连接中时自动重连生效。
+    func setRoutingMode(_ mode: RoutingMode) {
+        guard mode != routingMode else { return }
+        routingMode = mode
+        Persistence.routingMode = mode
+        if connectionState == .connected || connectionState == .connecting {
+            Task { await reconnect() }
+        }
+    }
+
+    // 断开 → 等待落定（最多 5 秒）→ 重连。超时未落定则不强行重连，
+    // 避免在 disconnecting 状态上叠加 startVPNTunnel。
+    private func reconnect() async {
+        disconnect()
+        for _ in 0..<50 {
+            if connectionState == .disconnected || connectionState == .invalid { break }
+            try? await Task.sleep(nanoseconds: 100_000_000)
+        }
+        guard connectionState == .disconnected || connectionState == .invalid else { return }
+        await connect()
     }
 
     // 退出登录时清空全部账号态：AppState 是根视图上的 @StateObject，跨登录/登出存活，

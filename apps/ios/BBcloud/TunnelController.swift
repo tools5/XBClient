@@ -26,8 +26,11 @@ final class TunnelController: ObservableObject {
     // MARK: - 连接
 
     // 新路径：AppNode → DNS 预解析（host 换 IP、sni 补原域名）→ 落盘 → 启动隧道。
-    func connect(node: AppNode) async {
+    // allHosts 传入全部订阅节点主机名：预解析成 IP 写进 exclude-ips.json，
+    // 扩展并入 excludedRoutes——规则路由外连与 App 内测速都不被自己的隧道套圈。
+    func connect(node: AppNode, allHosts: [String] = []) async {
         lastError = ""
+        await writeExcludeIPs(hosts: allHosts.isEmpty ? [node.host] : allHosts)
         let rawJson = node.rawJson
         let resolvedJSON: String
         do {
@@ -39,6 +42,19 @@ final class TunnelController: ObservableObject {
             return
         }
         await startTunnel(with: resolvedJSON)
+    }
+
+    // 全部订阅节点主机 → 可信解析成 IP → 原子写盘。节点大多共用入口域名，
+    // 去重后通常只有一两次 DoH 查询。失败的主机跳过（宁缺毋滥）。
+    private func writeExcludeIPs(hosts: [String]) async {
+        var ips = Set<String>()
+        for host in Set(hosts) where !host.isEmpty {
+            if let ip = await DNSResolver.resolveIPv4Trusted(host) {
+                ips.insert(ip)
+            }
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: Array(ips).sorted()) else { return }
+        try? data.write(to: AerionShared.excludeIPsFileURL, options: .atomic)
     }
 
     // 兼容路径：直接给 node JSON 字符串（调试/粘贴用）。校验 → 落盘 → 启动。

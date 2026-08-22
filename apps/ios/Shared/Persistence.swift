@@ -8,6 +8,7 @@ enum Persistence {
         static let session = "bbcloud.session"
         static let panelURL = "bbcloud.panelURL"
         static let lastSelectedNodeId = "bbcloud.lastSelectedNodeId"
+        static let routingMode = "bbcloud.routingMode"
     }
 
     private static var defaults: UserDefaults {
@@ -39,6 +40,16 @@ enum Persistence {
                 defaults.removeObject(forKey: Keys.panelURL)
             }
         }
+    }
+
+    /// 路由模式（规则/全局/直连），App 写、扩展读。默认规则分流，与安卓端一致。
+    static var routingMode: RoutingMode {
+        get {
+            guard let raw = defaults.string(forKey: Keys.routingMode),
+                  let mode = RoutingMode(rawValue: raw) else { return .rule }
+            return mode
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.routingMode) }
     }
 
     /// 上次选中的节点 id（AppNode.id），用于启动后恢复选择。置 nil 或空串即清除。

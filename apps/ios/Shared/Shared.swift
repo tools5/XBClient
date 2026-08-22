@@ -37,6 +37,12 @@ enum AerionShared {
     static let statusFileName = "status.json"
     static let statusChangedNotification = "moe.telecom.xbclient.status-changed"
 
+    // 规则分流：App 把订阅原始 Clash YAML 落盘（扩展在 rule 模式下交给
+    // aerion_start_route），把全部节点服务器 IP 落盘（扩展加进 excludedRoutes，
+    // 保证代理外连与 App 内测速不被自己的隧道套圈）。
+    static let routeConfigFileName = "route-config.yaml"
+    static let excludeIPsFileName = "exclude-ips.json"
+
     // App Group 容器：先尝试动态 group，拿不到则降级到本地 Documents（初期测试可用，
     // 但 App↔扩展 IPC 将不通——两者看不到同一个容器）。
     static func containerURL() -> URL {
@@ -51,6 +57,23 @@ enum AerionShared {
 
     static var nodeFileURL: URL { containerURL().appendingPathComponent(nodeFileName) }
     static var statusFileURL: URL { containerURL().appendingPathComponent(statusFileName) }
+    static var routeConfigFileURL: URL { containerURL().appendingPathComponent(routeConfigFileName) }
+    static var excludeIPsFileURL: URL { containerURL().appendingPathComponent(excludeIPsFileName) }
+}
+
+// 路由模式：与安卓端语义一致。
+// rule = 当前节点 + Clash 规则分流；global = 全部走代理；direct = 全部直连（调试用）。
+enum RoutingMode: String, CaseIterable, Identifiable {
+    case rule, global, direct
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .rule: return "规则"
+        case .global: return "全局"
+        case .direct: return "直连"
+        }
+    }
 }
 
 // 隧道状态：扩展写、App 读。logs 为有界环形缓冲（扩展内存预算紧，见设计 §4）。

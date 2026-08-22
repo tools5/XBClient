@@ -17,6 +17,8 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private let bridge = AerionBridge()
     private var sessionId: Int64 = 0
+    // 规则分流模式下的本地 mihomo 路由会话 id（0 = 未启用）。
+    private var routeSessionId: Int64 = 0
 
     // 状态全部在串行队列上变更：回调来自 tokio 线程、setTunnelNetworkSettings completion 来自
     // 系统队列，统一收敛避免竞态。
@@ -40,8 +42,12 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
-        // excludedRoutes(serverIP)：把节点服务器 IP 排除出隧道，代理自身外连才不会回环（设计 §3）。
-        let serverIPs = (extractHost(from: node).map { resolveIPv4($0) }) ?? []
+        // excludedRoutes：当前节点服务器 IP + App 预先解析的全部订阅节点 IP。
+        // 前者防代理外连回环（设计 §3）；后者让规则模式路由外连与 App 内测速
+        // 都不被自己的隧道套圈（测速数值才是真实直连延迟）。
+        var serverIPs = (extractHost(from: node).map { resolveIPv4($0) }) ?? []
+        serverIPs.append(contentsOf: loadExcludeIPs())
+        serverIPs = Array(Set(serverIPs)).sorted()
         if serverIPs.isEmpty {
             appendLog("[warn] 无法从 node 提取/解析服务器 IPv4；未设置 excludedRoutes，代理套接字可能回环（设计 §3）")
         } else {
@@ -65,9 +71,13 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             self.appendLog("[info] 定位到 utun fd = \(fd)")
 
+            // 规则分流：先起本地 mihomo 路由 SOCKS，再把隧道出口指向它；
+            // 失败则回退为全局（纯节点），保证至少能连上。
+            let tunnelNode = self.makeTunnelNode(from: node)
+
             let json: String
             do {
-                json = try self.buildStartJSON(node: node, tunFd: fd)
+                json = try self.buildStartJSON(node: tunnelNode, tunFd: fd)
             } catch {
                 self.finishStart(error: error, completionHandler: completionHandler)
                 return
@@ -99,6 +109,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             let result = bridge.stopVpn(sessionId: sessionId)
             appendLog("[info] aerion_stop_vpn -> \(result)")
             sessionId = 0
+        }
+        if routeSessionId != 0 {
+            let result = bridge.stopRoute(sessionId: routeSessionId)
+            appendLog("[info] aerion_stop_route -> \(result)")
+            routeSessionId = 0
         }
         setState(.disconnected, message: "已断开")
         completionHandler()
@@ -155,6 +170,77 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
                           userInfo: [NSLocalizedDescriptionKey: "StartVpnRequest 序列化失败"])
         }
         return json
+    }
+
+    // 按路由模式决定隧道出口节点：
+    //   rule   → 起本地 mihomo 路由 SOCKS（订阅 YAML + geoip 资产 + 选中节点），
+    //            出口指向 {type: socks5, 127.0.0.1:port}；任何一步失败都回退纯节点。
+    //   global → 原样返回节点；direct/block 伪节点不套规则。
+    private func makeTunnelNode(from node: Any) -> Any {
+        guard Persistence.routingMode == .rule, let obj = node as? [String: Any] else { return node }
+        let type = ((obj["type"] as? String) ?? "").lowercased()
+        if type == "direct" || type == "block" { return node }
+
+        guard let yamlData = try? Data(contentsOf: AerionShared.routeConfigFileURL),
+              let yaml = String(data: yamlData, encoding: .utf8),
+              !yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            appendLog("[warn] 规则模式缺少订阅路由配置（route-config.yaml），回退全局")
+            return node
+        }
+
+        var request: [String: Any] = [
+            "config_yaml": yaml,
+            "selected_node": obj,
+        ]
+        if let name = obj["name"] as? String, !name.isEmpty {
+            request["selected_proxy"] = name
+        }
+        if let assets = routeAssetsDir() {
+            request["geoip_dir"] = assets
+        } else {
+            appendLog("[warn] 未找到内置 geoip 资产（RouteAssets/geoip/cn.txt），GEOIP 规则可能不可用")
+        }
+        guard let data = try? JSONSerialization.data(withJSONObject: request),
+              let json = String(data: data, encoding: .utf8) else {
+            appendLog("[warn] 规则路由请求序列化失败，回退全局")
+            return node
+        }
+
+        let result = bridge.startRoute(json: json)
+        appendLog("[info] aerion_start_route -> \(result)")
+        guard let rdata = result.data(using: .utf8),
+              let robj = try? JSONSerialization.jsonObject(with: rdata) as? [String: Any],
+              robj["ok"] as? Bool == true,
+              let sid = (robj["session_id"] as? NSNumber)?.int64Value,
+              let socksAddr = robj["socks_addr"] as? String,
+              let colon = socksAddr.lastIndex(of: ":"),
+              let port = Int(socksAddr[socksAddr.index(after: colon)...]) else {
+            appendLog("[warn] 规则路由启动失败，回退全局连接")
+            return node
+        }
+        routeSessionId = sid
+        return [
+            "type": "socks5",
+            "name": "Clash Rules",
+            "host": String(socksAddr[..<colon]),
+            "port": port,
+        ]
+    }
+
+    // 扩展 bundle 内的路由资产目录（RouteAssets 以文件夹引用打包，含 geoip/cn.txt）。
+    private func routeAssetsDir() -> String? {
+        guard let base = Bundle.main.resourcePath else { return nil }
+        let dir = base + "/RouteAssets"
+        return FileManager.default.fileExists(atPath: dir + "/geoip/cn.txt") ? dir : nil
+    }
+
+    // App 侧预解析好的全部订阅节点 IP（exclude-ips.json），并入 excludedRoutes。
+    private func loadExcludeIPs() -> [String] {
+        guard let data = try? Data(contentsOf: AerionShared.excludeIPsFileURL),
+              let list = try? JSONSerialization.jsonObject(with: data) as? [String] else {
+            return []
+        }
+        return list.filter { DNSResolver.isIPv4($0) }
     }
 
     private func loadNode() throws -> Any {
@@ -268,6 +354,11 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
 
     private func finishStart(error: Error, completionHandler: @escaping (Error?) -> Void) {
         appendLog("[error] \(error.localizedDescription)")
+        // 启动失败不会再走 stopTunnel：路由会话在此显式回收，防止残留。
+        if routeSessionId != 0 {
+            _ = bridge.stopRoute(sessionId: routeSessionId)
+            routeSessionId = 0
+        }
         setState(.failed, message: error.localizedDescription)
         completionHandler(error)
     }

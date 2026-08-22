@@ -143,6 +143,10 @@ final class XboardAPI {
         let yaml = String(decoding: data, as: UTF8.self)
         let proxies = try ClashYAMLParser.parseProxies(fromYAML: yaml)
 
+        // 订阅原始 YAML 落盘（App Group）：规则分流模式下扩展将其交给
+        // aerion_start_route（内部有 sanitize），失败不阻塞节点解析。
+        try? yaml.data(using: .utf8)?.write(to: AerionShared.routeConfigFileURL, options: .atomic)
+
         var nodes: [AppNode] = []
         nodes.reserveCapacity(proxies.count)
         for (index, proxy) in proxies.enumerated() {
