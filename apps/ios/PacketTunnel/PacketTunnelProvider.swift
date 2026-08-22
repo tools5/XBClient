@@ -1,5 +1,6 @@
 import NetworkExtension
 import Darwin
+import AerionSys
 
 // NEPacketTunnelProvider：本切片的核心。流程严格按设计 §1/§2/§3：
 //   (1) 从 App Group 读粘贴的 node JSON；(2) 解析服务器 host→IP 供 excludedRoutes 防回环；
@@ -232,7 +233,7 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             if ret != 0 || addr.sc_family != UInt8(AF_SYSTEM) { continue }
             if ctlInfo.ctl_id == 0 {
-                if ioctl(fd, CTLIOCGINFO, &ctlInfo) != 0 { continue }
+                if ioctl(fd, AERION_CTLIOCGINFO, &ctlInfo) != 0 { continue }
             }
             if addr.sc_id == ctlInfo.ctl_id { return fd }
         }
