@@ -6,6 +6,7 @@ const router = useRouter()
 
 const serviceItems = [
   { path: '/tickets', icon: '✉', title: () => t('ticket_center'), desc: () => t('service_tickets_desc') },
+  { path: '/orders', icon: '¤', title: () => t('nav_orders'), desc: () => t('service_orders_desc') },
   { path: '/promotion', icon: '↗', title: () => t('nav_promotion'), desc: () => t('service_promotion_desc') },
   { path: '/traffic', icon: '⇅', title: () => t('nav_traffic_logs'), desc: () => t('service_traffic_desc') },
 ]

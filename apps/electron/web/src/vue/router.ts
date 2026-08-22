@@ -10,6 +10,7 @@ import AppRulesView from './views/AppRulesView.vue'
 import TrafficRulesView from './views/TrafficRulesView.vue'
 import LicensesView from './views/LicensesView.vue'
 import TicketsView from './views/TicketsView.vue'
+import OrdersView from './views/OrdersView.vue'
 import ServicesView from './views/ServicesView.vue'
 import PromotionView from './views/PromotionView.vue'
 import TrafficLogsView from './views/TrafficLogsView.vue'
@@ -26,6 +27,7 @@ export const router = createRouter({
     { path: '/profile', component: ProfileView, meta: { auth: true } },
     { path: '/services', component: ServicesView, meta: { auth: true } },
     { path: '/tickets', component: TicketsView, meta: { auth: true } },
+    { path: '/orders', component: OrdersView, meta: { auth: true } },
     { path: '/promotion', component: PromotionView, meta: { auth: true } },
     { path: '/traffic', component: TrafficLogsView, meta: { auth: true } },
     { path: '/settings', component: SettingsView, meta: { auth: true } },

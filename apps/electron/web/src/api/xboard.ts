@@ -46,6 +46,8 @@ const ACTIONS = {
   order_save: { method: 'POST', path: '/api/v1/user/order/save', auth: true },
   order_checkout: { method: 'POST', path: '/api/v1/user/order/checkout', auth: true },
   order_cancel: { method: 'POST', path: '/api/v1/user/order/cancel', auth: true },
+  // xiao/v2board 的 user 端 fetch 不分页（整表返回），分页参数仅为兼容 Xboard
+  order_fetch: { method: 'GET', path: '/api/v1/user/order/fetch', auth: true, query: ['current', 'pageSize'] },
   payment_methods: { method: 'GET', path: '/api/v1/user/order/getPaymentMethod', auth: true },
   oauth_bindings: { method: 'GET', path: '/api/v1/user/oauth/bindings', auth: true },
   oauth_bind_prepare: { method: 'POST', path: (params) => `/api/v1/user/oauth/${pathParam(params, 'driver')}/bind`, auth: true },

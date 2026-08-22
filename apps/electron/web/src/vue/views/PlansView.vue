@@ -132,6 +132,14 @@ async function loadClientConfig() {
   }
 }
 
+// 面板对已有未付款/开通中订单会拦截下单，消息后追加「我的订单」引导
+function withPendingOrderGuidance(text: string): string {
+  if (text.includes('未付款或开通中') || /unpaid or pending/i.test(text)) {
+    return `${text}（${t('order_pending_guidance')}）`
+  }
+  return text
+}
+
 async function buy(plan: PlanItem, price: PlanPrice) {
   if (appState.paymentEnabled) {
     const response = await xboardRequest<{ data?: string; message?: string }>('xbclient_plan_payment', {
@@ -162,7 +170,7 @@ async function buy(plan: PlanItem, price: PlanPrice) {
     params: { plan_id: plan.id, period: price.field },
   })
   if (!response.ok || !response.body?.data) {
-    error.value = !response.ok ? failureText(response) : 'order_save response missing data'
+    error.value = !response.ok ? withPendingOrderGuidance(failureText(response)) : 'order_save response missing data'
     return
   }
   const tradeNo = response.body.data

@@ -263,4 +263,20 @@
     <string name="traffic_logs_empty">گزارش ترافیکی وجود ندارد.</string>
     <string name="traffic_logs_up_down">آپلود %1$s · دانلود %2$s</string>
     <string name="traffic_logs_total_rate">مجموع %1$s · ضریب %2$s</string>
+    <string name="page_orders">سفارش‌های من</string>
+    <string name="orders_loading">در حال بارگذاری سفارش‌ها...</string>
+    <string name="orders_empty">سفارشی وجود ندارد.</string>
+    <string name="order_status_pending">در انتظار پرداخت</string>
+    <string name="order_status_processing">در حال فعال‌سازی</string>
+    <string name="order_status_cancelled">لغو شده</string>
+    <string name="order_status_completed">تکمیل شده</string>
+    <string name="order_status_discounted">تهاتر شده</string>
+    <string name="order_status_unknown">وضعیت %1$d</string>
+    <string name="order_period_deposit">شارژ حساب</string>
+    <string name="order_pay_continue">ادامه پرداخت</string>
+    <string name="order_cancel">لغو سفارش</string>
+    <string name="order_cancel_confirm_title">لغو سفارش</string>
+    <string name="order_cancel_confirm_message">سفارش %1$s لغو شود؟ در صورت نیاز می‌توانید دوباره سفارش دهید.</string>
+    <string name="order_balance_deduct">کسر از موجودی %1$s</string>
+    <string name="order_external_payment_hint">یک پرداخت خارجی در جریان است؛ این سفارش دیگر قابل لغو نیست.</string>
 </resources>

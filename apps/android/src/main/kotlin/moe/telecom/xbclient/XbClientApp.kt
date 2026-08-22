@@ -276,7 +276,7 @@ private fun MainShell(state: XbClientUiState, viewModel: XbClientViewModel, back
     val backTargetScreen = when (visibleScreen) {
         PassScreen.NODE_SELECT -> PassScreen.NODES
         PassScreen.TICKET_DETAIL -> PassScreen.TICKETS
-        PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS -> PassScreen.PROFILE
+        PassScreen.ORDERS, PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS -> PassScreen.PROFILE
         PassScreen.APP_RULES, PassScreen.OPEN_SOURCE_LICENSES, PassScreen.THEME -> PassScreen.SETTINGS
         else -> null
     }
@@ -386,7 +386,7 @@ private fun MainShell(state: XbClientUiState, viewModel: XbClientViewModel, back
 private fun MainNavigationBar(state: XbClientUiState, viewModel: XbClientViewModel, color: Color, floating: Boolean) {
     val selected = when (state.screen) {
         PassScreen.SETTINGS, PassScreen.APP_RULES, PassScreen.OPEN_SOURCE_LICENSES, PassScreen.THEME -> PassScreen.SETTINGS
-        PassScreen.PROFILE, PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS, PassScreen.TICKET_DETAIL -> PassScreen.PROFILE
+        PassScreen.PROFILE, PassScreen.ORDERS, PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS, PassScreen.TICKET_DETAIL -> PassScreen.PROFILE
         PassScreen.PLANS -> PassScreen.PLANS
         else -> PassScreen.NODES
     }
@@ -468,6 +468,7 @@ private fun MainScreenContent(
             item {
                 when (screen) {
                     PassScreen.PROFILE -> ProfileScreen(state, viewModel)
+                    PassScreen.ORDERS -> OrdersScreen(state, viewModel)
                     PassScreen.GIFT_CARDS -> GiftCardsScreen(state, viewModel)
                     PassScreen.ACCOUNT_SECURITY -> AccountSecurityScreen(state, viewModel)
                     PassScreen.INVITE_DETAILS -> InviteDetailsScreen(state)

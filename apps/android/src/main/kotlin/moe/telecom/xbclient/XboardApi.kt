@@ -50,6 +50,9 @@ object XboardApi {
             "plan_fetch" -> getAuth(normalizedBaseUrl, "/api/v1/user/plan/fetch", authData, emptyMap())
             "order_save" -> postAuth(normalizedBaseUrl, "/api/v1/user/order/save", authData, params)
             "order_checkout" -> postAuth(normalizedBaseUrl, "/api/v1/user/order/checkout", authData, params)
+            // xiao/v2board 的 user 端 fetch 不分页（整表返回），分页参数仅为兼容 Xboard，两端都无害
+            "order_fetch" -> getAuth(normalizedBaseUrl, "/api/v1/user/order/fetch", authData, optionalQuery(params, "current", "pageSize"))
+            "order_cancel" -> postAuth(normalizedBaseUrl, "/api/v1/user/order/cancel", authData, params)
             "payment_methods" -> getAuth(normalizedBaseUrl, "/api/v1/user/order/getPaymentMethod", authData, emptyMap())
             "oauth_bindings" -> getAuth(normalizedBaseUrl, "/api/v1/user/oauth/bindings", authData, emptyMap())
             "oauth_bind_prepare" -> requestJson("POST", normalizedBaseUrl, "/api/v1/user/oauth/${params.getString("driver")}/bind", authData, optionalQuery(params, "redirect", "client", "app_scheme"), JSONObject())

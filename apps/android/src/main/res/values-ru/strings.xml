@@ -263,4 +263,20 @@
     <string name="traffic_logs_empty">Нет записей трафика.</string>
     <string name="traffic_logs_up_down">Исходящий %1$s · Входящий %2$s</string>
     <string name="traffic_logs_total_rate">Всего %1$s · Коэффициент %2$s</string>
+    <string name="page_orders">Мои заказы</string>
+    <string name="orders_loading">Загрузка заказов...</string>
+    <string name="orders_empty">Заказов нет.</string>
+    <string name="order_status_pending">Ожидает оплаты</string>
+    <string name="order_status_processing">Активируется</string>
+    <string name="order_status_cancelled">Отменён</string>
+    <string name="order_status_completed">Завершён</string>
+    <string name="order_status_discounted">Зачтён</string>
+    <string name="order_status_unknown">Статус %1$d</string>
+    <string name="order_period_deposit">Пополнение</string>
+    <string name="order_pay_continue">Продолжить оплату</string>
+    <string name="order_cancel">Отменить заказ</string>
+    <string name="order_cancel_confirm_title">Отменить заказ</string>
+    <string name="order_cancel_confirm_message">Отменить заказ %1$s? Позже можно оформить новый заказ.</string>
+    <string name="order_balance_deduct">Списано с баланса %1$s</string>
+    <string name="order_external_payment_hint">Идёт внешняя оплата; этот заказ больше нельзя отменить.</string>
 </resources>

@@ -263,4 +263,20 @@
     <string name="traffic_logs_empty">No traffic logs.</string>
     <string name="traffic_logs_up_down">Upload %1$s · Download %2$s</string>
     <string name="traffic_logs_total_rate">Total %1$s · Rate %2$s</string>
+    <string name="page_orders">My Orders</string>
+    <string name="orders_loading">Loading orders...</string>
+    <string name="orders_empty">No orders.</string>
+    <string name="order_status_pending">Pending payment</string>
+    <string name="order_status_processing">Provisioning</string>
+    <string name="order_status_cancelled">Cancelled</string>
+    <string name="order_status_completed">Completed</string>
+    <string name="order_status_discounted">Credited</string>
+    <string name="order_status_unknown">Status %1$d</string>
+    <string name="order_period_deposit">Deposit</string>
+    <string name="order_pay_continue">Continue payment</string>
+    <string name="order_cancel">Cancel order</string>
+    <string name="order_cancel_confirm_title">Cancel order</string>
+    <string name="order_cancel_confirm_message">Cancel order %1$s? You can place a new order afterwards.</string>
+    <string name="order_balance_deduct">Balance deducted %1$s</string>
+    <string name="order_external_payment_hint">External payment in progress; this order can no longer be cancelled.</string>
 </resources>

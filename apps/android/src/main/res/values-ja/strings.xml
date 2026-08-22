@@ -263,4 +263,20 @@
     <string name="traffic_logs_empty">トラフィック明細はありません。</string>
     <string name="traffic_logs_up_down">アップロード %1$s · ダウンロード %2$s</string>
     <string name="traffic_logs_total_rate">合計 %1$s · 倍率 %2$s</string>
+    <string name="page_orders">注文履歴</string>
+    <string name="orders_loading">注文を読み込んでいます...</string>
+    <string name="orders_empty">注文はありません。</string>
+    <string name="order_status_pending">支払い待ち</string>
+    <string name="order_status_processing">開通処理中</string>
+    <string name="order_status_cancelled">キャンセル済み</string>
+    <string name="order_status_completed">完了</string>
+    <string name="order_status_discounted">充当済み</string>
+    <string name="order_status_unknown">ステータス %1$d</string>
+    <string name="order_period_deposit">チャージ</string>
+    <string name="order_pay_continue">支払いを続ける</string>
+    <string name="order_cancel">注文をキャンセル</string>
+    <string name="order_cancel_confirm_title">注文をキャンセル</string>
+    <string name="order_cancel_confirm_message">注文 %1$s をキャンセルしますか？必要な場合は改めて注文できます。</string>
+    <string name="order_balance_deduct">残高充当 %1$s</string>
+    <string name="order_external_payment_hint">外部支払いが進行中のため、この注文はキャンセルできません。</string>
 </resources>

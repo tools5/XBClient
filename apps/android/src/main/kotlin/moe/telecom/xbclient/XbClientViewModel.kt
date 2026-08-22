@@ -65,6 +65,10 @@ data class XbClientUiState(
     val paymentLoading: Boolean = false,
     val pendingPlanId: Int = 0,
     val pendingPlanPeriod: String = "",
+    /** 非空表示支付弹窗是在为已有订单续付（跳过 order_save），与 pendingPlanId 互斥 */
+    val pendingOrderTradeNo: String = "",
+    val orders: List<OrderItem> = emptyList(),
+    val ordersLoading: Boolean = false,
     val anyTlsNodes: List<AnyTlsNode> = emptyList(),
     val notices: List<NoticeItem> = emptyList(),
     val selectedNodeIndex: Int = 0,
@@ -157,7 +161,7 @@ data class XbClientUiState(
         get() = subscriptionBlockReason.isNotEmpty()
 
     val isRefreshing: Boolean
-        get() = userLoading || nodesLoading || plansLoading || invitesLoading || commissionLogsLoading || trafficLogsLoading || ticketsLoading || ticketDetailLoading || giftCardChecking || giftCardRedeeming || giftCardHistoryLoading || oauthBindingsLoading || nodesTesting || noticesLoading
+        get() = userLoading || nodesLoading || plansLoading || invitesLoading || commissionLogsLoading || trafficLogsLoading || ticketsLoading || ticketDetailLoading || giftCardChecking || giftCardRedeeming || giftCardHistoryLoading || oauthBindingsLoading || nodesTesting || noticesLoading || ordersLoading
 }
 
 sealed interface XbClientEvent {
@@ -241,6 +245,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             PassScreen.TICKETS -> refreshTickets(showLoading = true, showErrors = true)
             PassScreen.TICKET_DETAIL -> Unit
             PassScreen.PLANS -> Unit
+            PassScreen.ORDERS -> refreshOrders(force = true, showLoading = true, showErrors = true)
             PassScreen.GIFT_CARDS -> Unit
             PassScreen.NODE_SELECT -> refreshSubscriptionAndNodes()
             PassScreen.APP_RULES -> Unit
@@ -269,6 +274,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             PassScreen.INVITE_DETAILS -> refreshInviteDetails(force = true, showLoading = true, showErrors = true)
             PassScreen.TRAFFIC_LOGS -> refreshTrafficLogs(force = true, showLoading = true, showErrors = true)
             PassScreen.TICKETS -> refreshTickets(force = true, showLoading = true, showErrors = true)
+            PassScreen.ORDERS -> refreshOrders(force = true, showLoading = true, showErrors = true)
             PassScreen.TICKET_DETAIL -> _uiState.value.selectedTicket?.let {
                 refreshTicketDetail(it.id, showLoading = true, showErrors = true)
             }
@@ -312,7 +318,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         when (state.screen) {
             PassScreen.NODE_SELECT -> openScreen(PassScreen.NODES)
             PassScreen.TICKET_DETAIL -> openScreen(PassScreen.TICKETS)
-            PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS -> openScreen(PassScreen.PROFILE)
+            PassScreen.ORDERS, PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS -> openScreen(PassScreen.PROFILE)
             PassScreen.APP_RULES, PassScreen.OPEN_SOURCE_LICENSES, PassScreen.THEME -> openScreen(PassScreen.SETTINGS)
             PassScreen.NODES, PassScreen.PLANS, PassScreen.PROFILE, PassScreen.SETTINGS -> Unit
         }
@@ -491,7 +497,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun dismissPaymentSheet() {
-        _uiState.update { it.copy(paymentSheet = false, paymentLoading = false, pendingPlanId = 0, pendingPlanPeriod = "") }
+        _uiState.update { it.copy(paymentSheet = false, paymentLoading = false, pendingPlanId = 0, pendingPlanPeriod = "", pendingOrderTradeNo = "") }
     }
 
     fun showNotices() {
@@ -1275,6 +1281,67 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun requestPlanPurchase(planId: Int, period: String) {
+        openPaymentSheet { it.copy(pendingPlanId = planId, pendingPlanPeriod = period, pendingOrderTradeNo = "") }
+    }
+
+    /** 已有待支付订单的「继续支付」：复用同一支付方式弹窗与 checkout 语义，仅跳过 order_save。 */
+    fun continuePayOrder(tradeNo: String) {
+        if (tradeNo.isBlank()) {
+            return
+        }
+        val state = _uiState.value
+        if (state.authData.isEmpty() || state.paymentLoading) {
+            return
+        }
+        val order = state.orders.firstOrNull { it.tradeNo == tradeNo }
+        // 面板 checkout 对 total_amount<=0 的订单在校验支付方式前就标记已支付（type -1），
+        // 无需 method：直接免方式发起，站点未启用在线支付时也能完成
+        if (order != null && order.totalAmount <= 0) {
+            checkoutExistingOrder(tradeNo, methodId = null)
+            return
+        }
+        // xiao 面板会把订单锁定在首次 checkout 使用的支付方式上（payment_id），
+        // 换方式会被面板 500 拒绝：绑定方式直接续付，不再弹选择框
+        val boundPaymentId = order?.paymentId
+        if (boundPaymentId != null) {
+            continuePayBoundOrder(tradeNo, boundPaymentId)
+            return
+        }
+        openPaymentSheet { it.copy(pendingPlanId = 0, pendingPlanPeriod = "", pendingOrderTradeNo = tradeNo) }
+    }
+
+    /** 直接对已有订单发起 checkout；methodId 为 null 表示不带支付方式（免支付金额订单）。 */
+    private fun checkoutExistingOrder(tradeNo: String, methodId: Int?) {
+        val authData = _uiState.value.authData
+        _uiState.update { it.copy(paymentLoading = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                performOrderCheckout(authData, tradeNo, methodId)
+            } catch (error: Exception) {
+                _uiState.update { it.copy(paymentLoading = false) }
+                emitMessage(appendPendingOrderGuidance("发起在线支付失败：${error.message}"))
+            }
+        }
+    }
+
+    /** 已绑定支付方式的订单续付：仅允许绑定的方式；不在可用列表时引导去网站处理。 */
+    private fun continuePayBoundOrder(tradeNo: String, boundPaymentId: Int) {
+        val authData = _uiState.value.authData
+        _uiState.update { it.copy(paymentLoading = true) }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val bound = fetchPaymentMethods(authData).firstOrNull { it.id == boundPaymentId }
+                    ?: throw IllegalStateException("该订单已绑定的支付方式当前不可用，请到网站订单页完成支付。")
+                performOrderCheckout(authData, tradeNo, bound.id)
+            } catch (error: Exception) {
+                _uiState.update { it.copy(paymentLoading = false) }
+                emitMessage("发起在线支付失败：${error.message}")
+            }
+        }
+    }
+
+    /** 拉取支付方式并弹出支付弹窗；pending 目标（新购套餐 / 已有订单）由 configure 写入。 */
+    private fun openPaymentSheet(configure: (XbClientUiState) -> XbClientUiState) {
         val authData = _uiState.value.authData
         if (authData.isEmpty() || _uiState.value.paymentLoading) {
             return
@@ -1282,36 +1349,15 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(paymentLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val methods = requireSuccessfulBody(
-                    "支付方式",
-                    XboardApi.request(
-                        "payment_methods",
-                        defaultApiUrl(),
-                        authData,
-                        JSONObject()
-                    )
-                ).getJSONArray("data")
-                val paymentMethods = List(methods.length()) { index ->
-                    val item = methods.getJSONObject(index)
-                    // StripeCredit 需要客户端先取 stripe_token，应用内没有实现，过滤掉
-                    if (item.optString("payment") == "StripeCredit") return@List null
-                    PaymentMethodItem(
-                        id = item.getInt("id"),
-                        name = item.optString("name").ifBlank { item.optString("payment", "支付方式") },
-                        handlingFeeFixed = item.optInt("handling_fee_fixed", 0),
-                        handlingFeePercent = item.optDouble("handling_fee_percent", 0.0)
-                    )
-                }.filterNotNull()
+                val paymentMethods = fetchPaymentMethods(authData)
                 if (paymentMethods.isEmpty()) {
                     throw IllegalStateException("站点暂未启用在线支付方式。")
                 }
                 _uiState.update {
-                    it.copy(
+                    configure(it).copy(
                         paymentMethods = paymentMethods,
                         paymentSheet = true,
-                        paymentLoading = false,
-                        pendingPlanId = planId,
-                        pendingPlanPeriod = period
+                        paymentLoading = false
                     )
                 }
             } catch (error: Exception) {
@@ -1321,41 +1367,146 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** 拉取站点启用的支付方式（过滤应用内未实现的 StripeCredit）。 */
+    private suspend fun fetchPaymentMethods(authData: String): List<PaymentMethodItem> {
+        val methods = requireSuccessfulBody(
+            "支付方式",
+            XboardApi.request(
+                "payment_methods",
+                defaultApiUrl(),
+                authData,
+                JSONObject()
+            )
+        ).getJSONArray("data")
+        return List(methods.length()) { index ->
+            val item = methods.getJSONObject(index)
+            // StripeCredit 需要客户端先取 stripe_token，应用内没有实现，过滤掉
+            if (item.optString("payment") == "StripeCredit") return@List null
+            PaymentMethodItem(
+                id = item.getInt("id"),
+                name = item.optString("name").ifBlank { item.optString("payment", "支付方式") },
+                handlingFeeFixed = item.optInt("handling_fee_fixed", 0),
+                handlingFeePercent = item.optDouble("handling_fee_percent", 0.0)
+            )
+        }.filterNotNull()
+    }
+
     fun checkoutPlanWithMethod(methodId: Int) {
         val state = _uiState.value
-        if (state.authData.isEmpty() || state.pendingPlanId <= 0 || state.pendingPlanPeriod.isBlank() || state.paymentLoading) return
+        val continueTradeNo = state.pendingOrderTradeNo
+        val newPurchase = state.pendingPlanId > 0 && state.pendingPlanPeriod.isNotBlank()
+        if (state.authData.isEmpty() || (continueTradeNo.isBlank() && !newPurchase) || state.paymentLoading) return
         _uiState.update { it.copy(paymentLoading = true) }
         viewModelScope.launch(Dispatchers.IO) {
             try {
-                val saveBody = requireSuccessfulBody("创建订单", XboardApi.request(
-                    "order_save", defaultApiUrl(), state.authData,
-                    JSONObject().put("plan_id", state.pendingPlanId).put("period", state.pendingPlanPeriod)
-                ))
-                val checkoutBody = requireSuccessfulBody("发起支付", XboardApi.request(
-                    "order_checkout", defaultApiUrl(), state.authData,
-                    JSONObject().put("trade_no", saveBody.getString("data")).put("method", methodId)
-                ))
-                val type = checkoutBody.getInt("type")
-                val data = checkoutBody.optString("data")
-                dismissPaymentSheet()
-                when (type) {
-                    // -1=余额足额抵扣，2=网关即时扣款成功（如 Stripe），都视为已支付
-                    -1, 2 -> {
-                        emitMessage("订单已支付完成。")
-                        refreshSubscriptionAndNodes(force = true)
-                        refreshUserInfo()
-                        refreshPlans(force = true)
-                    }
-                    1 -> {
-                        if (!data.startsWith("https://") && !data.startsWith("http://")) throw IllegalStateException("支付链接无效。")
-                        emitEvent(XbClientEvent.OpenExternalUrl(data))
-                    }
-                    0 -> emitMessage("该支付方式返回扫码二维码，请在站点网页中完成扫码支付。")
-                    else -> throw IllegalStateException("不支持的支付响应。")
+                // 继续支付已有订单时跳过 order_save，直接对其 trade_no 发起 checkout
+                val tradeNo = continueTradeNo.ifBlank {
+                    requireSuccessfulBody("创建订单", XboardApi.request(
+                        "order_save", defaultApiUrl(), state.authData,
+                        JSONObject().put("plan_id", state.pendingPlanId).put("period", state.pendingPlanPeriod)
+                    )).getString("data")
                 }
+                performOrderCheckout(state.authData, tradeNo, methodId)
             } catch (error: Exception) {
                 _uiState.update { it.copy(paymentLoading = false) }
-                emitMessage("发起在线支付失败：${error.message}")
+                emitMessage(appendPendingOrderGuidance("发起在线支付失败：${error.message}"))
+            }
+        }
+    }
+
+    /** 对订单发起 checkout 并按响应类型处理；methodId 为 null 时不带 method（免支付金额订单）。 */
+    private suspend fun performOrderCheckout(authData: String, tradeNo: String, methodId: Int?) {
+        val params = JSONObject().put("trade_no", tradeNo)
+        if (methodId != null) {
+            params.put("method", methodId)
+        }
+        val checkoutBody = requireSuccessfulBody("发起支付", XboardApi.request("order_checkout", defaultApiUrl(), authData, params))
+        val type = checkoutBody.getInt("type")
+        val data = checkoutBody.optString("data")
+        dismissPaymentSheet()
+        when (type) {
+            // -1=余额足额抵扣，2=网关即时扣款成功（如 Stripe），都视为已支付
+            -1, 2 -> {
+                emitMessage("订单已支付完成。")
+                refreshSubscriptionAndNodes(force = true)
+                refreshUserInfo()
+                refreshPlans(force = true)
+                refreshOrders(force = true)
+            }
+            1 -> {
+                if (!data.startsWith("https://") && !data.startsWith("http://")) throw IllegalStateException("支付链接无效。")
+                emitEvent(XbClientEvent.OpenExternalUrl(data))
+                // xiao 面板在 checkout 后把订单锁定到该支付方式，刷新以同步取消按钮状态
+                refreshOrders(force = true)
+            }
+            0 -> {
+                emitMessage("该支付方式返回扫码二维码，请在站点网页中完成扫码支付。")
+                refreshOrders(force = true)
+            }
+            else -> throw IllegalStateException("不支持的支付响应。")
+        }
+    }
+
+    /** 面板对已有未付款/开通中订单会拦截下单，消息后追加「我的订单」引导。 */
+    private fun appendPendingOrderGuidance(text: String): String =
+        if (text.contains("未付款或开通中") || text.contains("unpaid or pending", ignoreCase = true)) {
+            "$text（可到 个人中心 → 我的订单 继续支付或取消）"
+        } else {
+            text
+        }
+
+    fun refreshOrders(force: Boolean = false, showLoading: Boolean = false, showErrors: Boolean = false) {
+        val authData = _uiState.value.authData
+        if (authData.isEmpty() || _uiState.value.ordersLoading) {
+            return
+        }
+        if (!force && _uiState.value.orders.isNotEmpty()) {
+            return
+        }
+        if (showLoading) {
+            _uiState.update { it.copy(ordersLoading = true) }
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // xiao/v2board 的 user fetch 不分页（整表返回）；分页参数仅为兼容 Xboard
+                val body = requireSuccessfulBody(
+                    "订单列表",
+                    XboardApi.request(
+                        "order_fetch",
+                        defaultApiUrl(),
+                        authData,
+                        JSONObject().put("current", "1").put("pageSize", "100")
+                    )
+                )
+                _uiState.update { it.copy(orders = extractDataArray(body).toOrderItemList(), ordersLoading = false) }
+            } catch (error: Exception) {
+                if (showLoading) {
+                    _uiState.update { it.copy(ordersLoading = false) }
+                }
+                if (showErrors) {
+                    emitMessage("订单列表加载失败：${error.message}")
+                }
+            }
+        }
+    }
+
+    fun cancelOrder(tradeNo: String) {
+        val authData = _uiState.value.authData
+        if (authData.isEmpty() || tradeNo.isBlank()) {
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                requireSuccessfulBody(
+                    "取消订单",
+                    XboardApi.request("order_cancel", defaultApiUrl(), authData, JSONObject().put("trade_no", tradeNo))
+                )
+                emitMessage("订单已取消。")
+                refreshOrders(force = true, showLoading = true, showErrors = true)
+                // 面板取消时会退回已抵扣的余额
+                refreshUserInfo()
+            } catch (error: Exception) {
+                emitMessage("取消订单失败：${error.message}")
             }
         }
     }
@@ -2244,6 +2395,14 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             throw IllegalStateException("GitHub 项目地址为空。")
         }
         viewModelScope.launch(Dispatchers.IO) {
+            // 国内设备普遍直连不了 GitHub：优先查面板镜像（面板每小时把 Release
+            // 同步到 /clients/android-latest.json），镜像不可用再回退 GitHub。
+            try {
+                checkPanelReleaseUpdate()
+                return@launch
+            } catch (error: Exception) {
+                Log.w("XbClient", "面板更新镜像不可用，回退 GitHub 检查：${error.message}")
+            }
             try {
                 val slug = githubRepoSlug(value)
                 val connection = (URL("https://api.github.com/repos/$slug/releases/latest").openConnection() as HttpURLConnection).apply {
@@ -2266,7 +2425,8 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                     throw IllegalStateException("GitHub Release 缺少版本号。")
                 }
                 val currentVersion = BuildConfig.VERSION_NAME.removeSuffix(".debug")
-                if (normalizeVersion(latestVersion) == normalizeVersion(currentVersion)) {
+                // 仅严格更新才提示：侧载的新版不应被 GitHub 上的旧版触发降级弹窗
+                if (compareVersions(latestVersion, currentVersion) <= 0) {
                     return@launch
                 }
                 val releaseUrl = release.getString("html_url")
@@ -2305,6 +2465,61 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** 读面板镜像的更新元数据；任何失败都抛出，由调用方回退 GitHub 检查。 */
+    private fun checkPanelReleaseUpdate() {
+        val connection = (URL("${defaultApiUrl().trimEnd('/')}/clients/android-latest.json").openConnection() as HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 5000
+            readTimeout = 5000
+            setRequestProperty("User-Agent", BuildConfig.USER_AGENT)
+            setRequestProperty("Accept", "application/json")
+        }
+        val status = connection.responseCode
+        if (status !in 200..299) {
+            throw IllegalStateException("HTTP $status")
+        }
+        val info = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
+        val latestVersion = info.getString("version")
+        if (latestVersion.isEmpty()) {
+            throw IllegalStateException("镜像元数据缺少版本号。")
+        }
+        val currentVersion = BuildConfig.VERSION_NAME.removeSuffix(".debug")
+        // 仅镜像版本严格更新才提示：过期镜像（同步 cron 挂了）供着旧版本时会导致每次启动
+        // 弹「更新」且安装因 VERSION_DOWNGRADE 失败；抛出让调用方回退 GitHub 检查
+        if (compareVersions(latestVersion, currentVersion) <= 0) {
+            throw IllegalStateException("镜像版本 $latestVersion 不比当前版本 $currentVersion 新。")
+        }
+        // 与 GitHub 检查同一选择语义：universal 优先，其次当前 ABI，最后取 url 字段
+        val apks = info.optJSONArray("apks") ?: JSONArray()
+        var abiApkUrl = ""
+        var universalApkUrl = ""
+        for (index in 0 until apks.length()) {
+            val apk = apks.getJSONObject(index)
+            val name = apk.getString("name")
+            if (!name.endsWith(".apk", ignoreCase = true)) {
+                continue
+            }
+            if (abiApkUrl.isEmpty() && Build.SUPPORTED_ABIS.any { name.contains(it, ignoreCase = true) }) {
+                abiApkUrl = apk.getString("url")
+            }
+            if (name.contains("universal", ignoreCase = true)) {
+                universalApkUrl = apk.getString("url")
+            }
+        }
+        val downloadUrl = universalApkUrl.ifEmpty { abiApkUrl }.ifEmpty { info.getString("url") }
+        if (!downloadUrl.endsWith(".apk", ignoreCase = true)) {
+            throw IllegalStateException("镜像元数据缺少可用的 APK 下载地址。")
+        }
+        _uiState.update {
+            it.copy(
+                updateAvailable = true,
+                latestReleaseVersion = latestVersion,
+                latestReleaseUrl = info.optString("release_url"),
+                latestDownloadUrl = downloadUrl
+            )
+        }
+    }
+
     private fun githubRepoSlug(projectUrl: String): String {
         val trimmed = projectUrl.trim().removeSuffix(".git")
         if (trimmed.matches(Regex("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"))) {
@@ -2319,6 +2534,20 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
 
     private fun normalizeVersion(value: String): String =
         value.trim().removePrefix("v").removePrefix("V").removeSuffix(".debug").substringBefore("-beta.")
+
+    /** 归一化后按点号分段做数值比较；缺失段与非数字段按 0。返回 >0 表示 left 比 right 新。 */
+    private fun compareVersions(left: String, right: String): Int {
+        val leftParts = normalizeVersion(left).split('.')
+        val rightParts = normalizeVersion(right).split('.')
+        for (index in 0 until maxOf(leftParts.size, rightParts.size)) {
+            val leftNum = leftParts.getOrNull(index)?.trim()?.toIntOrNull() ?: 0
+            val rightNum = rightParts.getOrNull(index)?.trim()?.toIntOrNull() ?: 0
+            if (leftNum != rightNum) {
+                return leftNum.compareTo(rightNum)
+            }
+        }
+        return 0
+    }
 
     private fun defaultApiUrl(): String {
         val value = BuildConfig.DEFAULT_API_URL.trim()

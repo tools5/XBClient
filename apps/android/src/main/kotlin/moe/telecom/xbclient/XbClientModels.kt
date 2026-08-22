@@ -37,6 +37,7 @@ enum class PassScreen {
     NODES,
     PLANS,
     PROFILE,
+    ORDERS,
     GIFT_CARDS,
     ACCOUNT_SECURITY,
     INVITE_DETAILS,
@@ -247,6 +248,39 @@ data class GiftCardUsageItem(
     val multiplierApplied: Double,
     val createdAt: String
 )
+
+// v2board 订单 status：0 待支付 / 1 开通中 / 2 已取消 / 3 已完成 / 4 已折抵
+const val ORDER_STATUS_PENDING = 0
+const val ORDER_STATUS_PROCESSING = 1
+const val ORDER_STATUS_CANCELLED = 2
+const val ORDER_STATUS_COMPLETED = 3
+const val ORDER_STATUS_DISCOUNTED = 4
+
+// v2board 充值订单的 period 固定为 deposit（plan_id = 0，无 plan 映射）
+const val ORDER_PERIOD_DEPOSIT = "deposit"
+
+data class OrderItem(
+    val tradeNo: String,
+    val status: Int,
+    val period: String,
+    val planId: Int,
+    /** 套餐名可为空（充值订单或套餐已删除），显示时按 period 回退 */
+    val planName: String,
+    /** 金额单位均为分 */
+    val totalAmount: Int,
+    val balanceAmount: Int,
+    val handlingAmount: Int,
+    val createdAt: Long,
+    /**
+     * xiao/v2board：首次 checkout 后订单被锁定到该支付方式（换方式或取消都会被面板 500 拒绝）；
+     * Xboard 响应无此字段，恒为 null
+     */
+    val paymentId: Int? = null
+) {
+    /** 实际待支付金额：下单金额 + 手续费（余额抵扣已在面板侧从 total_amount 扣除） */
+    val payableAmount: Int
+        get() = totalAmount + handlingAmount
+}
 
 data class PlanPrice(
     val field: String,
@@ -477,6 +511,25 @@ fun JSONObject.toGiftCardUsageItem(): GiftCardUsageItem =
         createdAt = optString("created_at")
     )
 
+// 订单字段容错：trade_no/status 是核心语义必填；其余字段（金额、时间、plan 映射）
+// 双面板可能缺失或为 JSON null，一律判空回退（金额按 0 分、套餐名按空串处理）
+fun JSONObject.toOrderItem(): OrderItem {
+    val plan = opt("plan") as? JSONObject
+    return OrderItem(
+        tradeNo = getString("trade_no"),
+        status = numericValue(get("status")).toInt(),
+        period = textOrEmpty("period"),
+        planId = numericValueOrZero(opt("plan_id")).toInt(),
+        planName = plan?.let { it.textOrEmpty("name") }.orEmpty(),
+        totalAmount = numericValueOrZero(opt("total_amount")).toInt(),
+        balanceAmount = numericValueOrZero(opt("balance_amount")).toInt(),
+        handlingAmount = numericValueOrZero(opt("handling_amount")).toInt(),
+        createdAt = numericValueOrZero(opt("created_at")).toLong(),
+        // isNull 同时覆盖「字段缺失（Xboard）」与「JSON null（xiao 未绑定支付方式）」
+        paymentId = if (isNull("payment_id")) null else numericValueOrZero(opt("payment_id")).toInt()
+    )
+}
+
 fun JSONObject.toPlanItem(): PlanItem {
     val periodFields = listOf(
         "month_price" to "月付",
@@ -537,6 +590,9 @@ fun JSONArray.toGiftCardUsageItemList(): List<GiftCardUsageItem> =
 
 fun JSONArray.toPlanItemList(): List<PlanItem> =
     List(length()) { index -> getJSONObject(index).toPlanItem() }
+
+fun JSONArray.toOrderItemList(): List<OrderItem> =
+    List(length()) { index -> getJSONObject(index).toOrderItem() }
 
 fun JSONArray.toAdRewardLogItemList(): List<AdRewardLogItem> =
     List(length()) { index ->

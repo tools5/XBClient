@@ -496,7 +496,7 @@ private fun screenOrder(screen: PassScreen): Int =
         PassScreen.NODE_SELECT -> 1
         PassScreen.PLANS -> 2
         PassScreen.PROFILE -> 3
-        PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS, PassScreen.TICKET_DETAIL -> 4
+        PassScreen.ORDERS, PassScreen.GIFT_CARDS, PassScreen.ACCOUNT_SECURITY, PassScreen.INVITE_DETAILS, PassScreen.TRAFFIC_LOGS, PassScreen.TICKETS, PassScreen.TICKET_DETAIL -> 4
         PassScreen.SETTINGS -> 4
         PassScreen.APP_RULES, PassScreen.OPEN_SOURCE_LICENSES, PassScreen.THEME -> 5
     }
@@ -512,6 +512,7 @@ internal fun screenTitle(screen: PassScreen): String =
         PassScreen.NODE_SELECT -> stringResource(R.string.section_available_nodes)
         PassScreen.APP_RULES -> stringResource(R.string.section_app_rules)
         PassScreen.OPEN_SOURCE_LICENSES -> stringResource(R.string.about_open_source_licenses)
+        PassScreen.ORDERS -> stringResource(R.string.page_orders)
         PassScreen.GIFT_CARDS -> stringResource(R.string.page_gift_cards)
         PassScreen.ACCOUNT_SECURITY -> stringResource(R.string.page_account_security)
         PassScreen.INVITE_DETAILS -> stringResource(R.string.page_invite_details)

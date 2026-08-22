@@ -72,7 +72,9 @@ internal data class XbTokens(
     /** 次按钮 / 中性 tag 描边 */
     val controlBorder: Color,
     /** 错误红（描边式，不做色块） */
-    val error: Color
+    val error: Color,
+    /** 警示黄（描边式，不做色块；订单待支付等待办状态） */
+    val warning: Color
 )
 
 internal val XbDarkTokens = XbTokens(
@@ -92,7 +94,8 @@ internal val XbDarkTokens = XbTokens(
     buttonPrimaryDisabledBg = Color(0xFF262626),
     buttonPrimaryDisabledText = Color(0xFF5C5C5C),
     controlBorder = Color(0xFF2E2E2E),
-    error = Color(0xFFF87171)
+    error = Color(0xFFF87171),
+    warning = Color(0xFFFBBF24)
 )
 
 internal val XbLightTokens = XbTokens(
@@ -112,7 +115,8 @@ internal val XbLightTokens = XbTokens(
     buttonPrimaryDisabledBg = Color(0xFFE5E5E5),
     buttonPrimaryDisabledText = Color(0xFFA3A3A3),
     controlBorder = Color(0xFFE5E5E5),
-    error = Color(0xFFDC2626)
+    error = Color(0xFFDC2626),
+    warning = Color(0xFFB45309)
 )
 
 internal val LocalXbTokens = staticCompositionLocalOf { XbDarkTokens }

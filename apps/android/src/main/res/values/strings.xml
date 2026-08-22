@@ -276,4 +276,20 @@
     <string name="traffic_logs_empty">暂无流量明细。</string>
     <string name="traffic_logs_up_down">上传 %1$s · 下载 %2$s</string>
     <string name="traffic_logs_total_rate">合计 %1$s · 倍率 %2$s</string>
+    <string name="page_orders">我的订单</string>
+    <string name="orders_loading">正在加载订单...</string>
+    <string name="orders_empty">暂无订单。</string>
+    <string name="order_status_pending">待支付</string>
+    <string name="order_status_processing">开通中</string>
+    <string name="order_status_cancelled">已取消</string>
+    <string name="order_status_completed">已完成</string>
+    <string name="order_status_discounted">已折抵</string>
+    <string name="order_status_unknown">状态 %1$d</string>
+    <string name="order_period_deposit">充值</string>
+    <string name="order_pay_continue">继续支付</string>
+    <string name="order_cancel">取消订单</string>
+    <string name="order_cancel_confirm_title">取消订单</string>
+    <string name="order_cancel_confirm_message">确定取消订单 %1$s 吗？取消后如需购买可重新下单。</string>
+    <string name="order_balance_deduct">余额抵扣 %1$s</string>
+    <string name="order_external_payment_hint">已发起外部支付，该订单暂不可取消。</string>
 </resources>

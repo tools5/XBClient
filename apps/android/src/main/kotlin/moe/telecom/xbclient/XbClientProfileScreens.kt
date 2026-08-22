@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -18,6 +19,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -29,6 +31,7 @@ import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Text
 import top.yukonga.miuix.kmp.basic.TextField
+import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -67,6 +70,7 @@ internal fun ProfileScreen(state: XbClientUiState, viewModel: XbClientViewModel)
     }
     PreferenceCard {
         ArrowPreference(title = stringResource(R.string.page_account_security), onClick = { viewModel.openScreen(PassScreen.ACCOUNT_SECURITY) })
+        ArrowPreference(title = stringResource(R.string.page_orders), onClick = { viewModel.openScreen(PassScreen.ORDERS) })
         ArrowPreference(title = stringResource(R.string.page_gift_cards), onClick = { viewModel.openScreen(PassScreen.GIFT_CARDS) })
         ArrowPreference(title = stringResource(R.string.common_logout), onClick = viewModel::logout)
     }
@@ -127,6 +131,196 @@ internal fun ProfileScreen(state: XbClientUiState, viewModel: XbClientViewModel)
         }
     }
 }
+
+@Composable
+internal fun OrdersScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
+    var cancelTradeNo by rememberSaveable { mutableStateOf("") }
+    Section(stringResource(R.string.page_orders)) {
+        when {
+            state.ordersLoading && state.orders.isEmpty() -> Panel {
+                Text(stringResource(R.string.orders_loading), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            }
+            state.orders.isEmpty() -> Panel {
+                Text(stringResource(R.string.orders_empty), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            }
+            else -> {
+                for ((index, order) in state.orders.withIndex()) {
+                    OrderRow(
+                        order = order,
+                        state = state,
+                        viewModel = viewModel,
+                        onCancelRequest = { cancelTradeNo = it }
+                    )
+                    if (index != state.orders.lastIndex) {
+                        Spacer(Modifier.height(12.dp))
+                    }
+                }
+            }
+        }
+    }
+    OverlayDialog(
+        show = cancelTradeNo.isNotEmpty(),
+        title = stringResource(R.string.order_cancel_confirm_title),
+        summary = stringResource(R.string.order_cancel_confirm_message, cancelTradeNo),
+        onDismissRequest = { cancelTradeNo = "" }
+    ) {
+        Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
+            XbTextButton(
+                text = stringResource(android.R.string.cancel),
+                onClick = { cancelTradeNo = "" },
+                modifier = Modifier.weight(1f)
+            )
+            Spacer(Modifier.width(20.dp))
+            XbTextButton(
+                text = stringResource(R.string.order_cancel),
+                onClick = {
+                    viewModel.cancelOrder(cancelTradeNo)
+                    cancelTradeNo = ""
+                },
+                modifier = Modifier.weight(1f),
+                primary = true
+            )
+        }
+    }
+}
+
+@Composable
+private fun OrderRow(
+    order: OrderItem,
+    state: XbClientUiState,
+    viewModel: XbClientViewModel,
+    onCancelRequest: (String) -> Unit
+) {
+    val periodText = orderPeriodText(order.period)
+    // plan 名可为空（充值订单 / 套餐已删除）：充值按 period 回退，其余显示 “-”
+    val title = order.planName.ifBlank { if (order.period == ORDER_PERIOD_DEPOSIT) periodText else "-" }
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp)
+            .xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
+        insideMargin = PaddingValues(16.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.weight(1f)) {
+                Text(title, style = MiuixTheme.textStyles.title2)
+                if (periodText != title) {
+                    Spacer(Modifier.height(2.dp))
+                    Text(periodText, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+                }
+            }
+            Spacer(Modifier.width(12.dp))
+            OrderStatusTag(order.status)
+        }
+        Spacer(Modifier.height(8.dp))
+        Text(
+            formatMoney(order.payableAmount, state.currencySymbol, state.currencyUnit),
+            fontFamily = FontFamily.Monospace
+        )
+        if (order.balanceAmount > 0) {
+            Spacer(Modifier.height(2.dp))
+            Text(
+                stringResource(R.string.order_balance_deduct, formatMoney(order.balanceAmount, state.currencySymbol, state.currencyUnit)),
+                style = MiuixTheme.textStyles.body2,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+        val meta = listOf(order.tradeNo, formatUnixTime(order.createdAt)).filter { it.isNotEmpty() }.joinToString(" · ")
+        if (meta.isNotEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            Text(meta, style = MiuixTheme.textStyles.body2, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        }
+        if (order.status == ORDER_STATUS_PENDING) {
+            Spacer(Modifier.height(12.dp))
+            if (order.paymentId != null) {
+                // xiao 面板对已绑定支付方式（payment_id 非空）的订单会拒绝取消，隐藏取消入口
+                Text(
+                    stringResource(R.string.order_external_payment_hint),
+                    style = MiuixTheme.textStyles.body2,
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                )
+                Spacer(Modifier.height(8.dp))
+                XbPrimaryButton(
+                    onClick = { viewModel.continuePayOrder(order.tradeNo) },
+                    enabled = !state.paymentLoading,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(stringResource(R.string.order_pay_continue))
+                }
+            } else {
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    XbPrimaryButton(
+                        onClick = { viewModel.continuePayOrder(order.tradeNo) },
+                        enabled = !state.paymentLoading,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.order_pay_continue))
+                    }
+                    Spacer(Modifier.width(10.dp))
+                    XbSecondaryButton(
+                        onClick = { onCancelRequest(order.tradeNo) },
+                        enabled = !state.paymentLoading,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(stringResource(R.string.order_cancel))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 订单状态徽标（克制配色）：待支付=描边黄 / 开通中=描边灰 / 已完成=绿 tag 色块 /
+ * 已取消=弱化描边 / 已折抵及未知=描边灰。
+ */
+@Composable
+private fun OrderStatusTag(status: Int) {
+    val t = xbTokens()
+    val filled = status == ORDER_STATUS_COMPLETED
+    val statusColor = when (status) {
+        ORDER_STATUS_PENDING -> t.warning
+        ORDER_STATUS_COMPLETED -> t.tagText
+        ORDER_STATUS_CANCELLED -> t.textFaint
+        else -> t.textMuted
+    }
+    Card(
+        colors = CardDefaults.defaultColors(color = if (filled) t.tagBg else Color.Transparent),
+        cornerRadius = XbControlRadius,
+        modifier = if (filled) Modifier else Modifier.xbOutlineTagBorder(statusColor),
+        insideMargin = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+    ) {
+        Text(orderStatusText(status), style = MiuixTheme.textStyles.body2, color = statusColor)
+    }
+}
+
+@Composable
+private fun orderStatusText(status: Int): String =
+    when (status) {
+        ORDER_STATUS_PENDING -> stringResource(R.string.order_status_pending)
+        ORDER_STATUS_PROCESSING -> stringResource(R.string.order_status_processing)
+        ORDER_STATUS_CANCELLED -> stringResource(R.string.order_status_cancelled)
+        ORDER_STATUS_COMPLETED -> stringResource(R.string.order_status_completed)
+        ORDER_STATUS_DISCOUNTED -> stringResource(R.string.order_status_discounted)
+        else -> stringResource(R.string.order_status_unknown, status)
+    }
+
+private val ORDER_PERIOD_PRICE_FIELDS = setOf(
+    "month_price", "quarter_price", "half_year_price", "year_price",
+    "two_year_price", "three_year_price", "onetime_price", "reset_price"
+)
+
+@Composable
+private fun orderPeriodText(period: String): String =
+    when {
+        period == ORDER_PERIOD_DEPOSIT -> stringResource(R.string.order_period_deposit)
+        period in ORDER_PERIOD_PRICE_FIELDS -> planPriceLabel(period)
+        // Xboard 新版可能用重命名后的周期字段，未知值原样展示
+        else -> period.ifBlank { "-" }
+    }
 
 @Composable
 internal fun InviteDetailsScreen(state: XbClientUiState) {
