@@ -99,12 +99,14 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
             }
             self.sessionId = sid
             self.setState(.connected, message: "已连接", sessionId: sid)
+            self.startTrafficTimer(utunFd: fd)
             completionHandler(nil)
         }
     }
 
     override func stopTunnel(with reason: NEProviderStopReason, completionHandler: @escaping () -> Void) {
         appendLog("[info] stopTunnel reason=\(reason.rawValue)")
+        stopTrafficTimer()
         if sessionId != 0 {
             let result = bridge.stopVpn(sessionId: sessionId)
             appendLog("[info] aerion_stop_vpn -> \(result)")
@@ -320,21 +322,10 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     // MARK: - 状态与事件
 
     private func handleEvent(_ json: String) {
-        // traffic_recorded 是高频事件（千字节级粒度），不进日志、节流写盘，
-        // 只把累计上下行字节记进结构化状态供 App 展示速度/用量。
-        if json.contains("\"traffic_recorded\"") {
-            guard let data = json.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  obj["type"] as? String == "traffic_recorded" else { return }
-            let up = (obj["upload_bytes"] as? NSNumber)?.int64Value
-            let down = (obj["download_bytes"] as? NSNumber)?.int64Value
-            statusQueue.async {
-                if let up { self.currentStatus.uploadBytes = up }
-                if let down { self.currentStatus.downloadBytes = down }
-                self.writeTrafficThrottled()
-            }
-            return
-        }
+        // traffic_recorded 是高频事件（千字节级粒度），只在全局模式的凭证协议上出现，
+        // 不能作为统一流量来源（规则模式出口是本地 socks5，没有这些事件）——
+        // 流量统计改用 utun 接口计数器（见 sampleTraffic），这里仅拦截防止刷爆日志。
+        if json.contains("\"traffic_recorded\"") { return }
         appendLog("[event] \(json)")
         // 隧道运行时非预期退出：内核发 vpn_session_closed，反映为失败态供 App 展示。
         if json.contains("vpn_session_closed") {
@@ -342,14 +333,80 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
         }
     }
 
-    // 流量状态写盘节流：最快 1 秒一次（statusQueue 上调用）。
+    // MARK: - 流量统计（utun 接口计数器，模式无关）
+
+    private var trafficTimer: DispatchSourceTimer?
+    private var utunName: String?
+    private var lastInBytes: UInt32 = 0
+    private var lastOutBytes: UInt32 = 0
+    private var counterPrimed = false
+    private var totalUpload: Int64 = 0
+    private var totalDownload: Int64 = 0
     private var lastTrafficWriteAt: TimeInterval = 0
-    private func writeTrafficThrottled() {
+
+    // 每秒采样 utun 接口的 in/out 字节数（if_data 为 32 位计数器，用无符号
+    // 减法自然处理回绕）。utun 方向语义：obytes = 应用发出进隧道（上行），
+    // ibytes = 隧道回注给应用（下行）。
+    private func startTrafficTimer(utunFd: Int32) {
+        utunName = interfaceName(for: utunFd)
+        let timer = DispatchSource.makeTimerSource(queue: statusQueue)
+        timer.schedule(deadline: .now() + 1, repeating: 1)
+        timer.setEventHandler { [weak self] in self?.sampleTraffic() }
+        timer.resume()
+        trafficTimer = timer
+    }
+
+    private func stopTrafficTimer() {
+        trafficTimer?.cancel()
+        trafficTimer = nil
+    }
+
+    // statusQueue 上执行。
+    private func sampleTraffic() {
+        guard let name = utunName, let (inBytes, outBytes) = interfaceBytes(name: name) else { return }
+        if counterPrimed {
+            totalUpload += Int64(outBytes &- lastOutBytes)
+            totalDownload += Int64(inBytes &- lastInBytes)
+        }
+        lastInBytes = inBytes
+        lastOutBytes = outBytes
+        counterPrimed = true
+        currentStatus.uploadBytes = totalUpload
+        currentStatus.downloadBytes = totalDownload
+        // 节流写盘：最快 1 秒一次（与采样同频，天然满足）。
         let now = Date().timeIntervalSince1970
         guard now - lastTrafficWriteAt >= 1.0 else { return }
         lastTrafficWriteAt = now
         currentStatus.updatedAt = now
         StatusChannel.write(currentStatus)
+    }
+
+    // fd → 接口名（与 locateUtunFD 相同的 getsockopt ABI）。
+    private func interfaceName(for fd: Int32) -> String? {
+        var nameBuf = [CChar](repeating: 0, count: 128)
+        var len = socklen_t(nameBuf.count)
+        guard getsockopt(fd, 2 /* SYSPROTO_CONTROL */, 2 /* UTUN_OPT_IFNAME */, &nameBuf, &len) == 0 else {
+            return nil
+        }
+        let name = String(cString: nameBuf)
+        return name.isEmpty ? nil : name
+    }
+
+    // getifaddrs 里找该接口的 AF_LINK 项，读 if_data 的 ifi_ibytes/ifi_obytes。
+    private func interfaceBytes(name: String) -> (UInt32, UInt32)? {
+        var ifaddrPtr: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&ifaddrPtr) == 0, let first = ifaddrPtr else { return nil }
+        defer { freeifaddrs(ifaddrPtr) }
+        var cursor: UnsafeMutablePointer<ifaddrs>? = first
+        while let ifa = cursor {
+            cursor = ifa.pointee.ifa_next
+            guard let cname = ifa.pointee.ifa_name, String(cString: cname) == name,
+                  let addr = ifa.pointee.ifa_addr, addr.pointee.sa_family == UInt8(AF_LINK),
+                  let dataPtr = ifa.pointee.ifa_data else { continue }
+            let data = dataPtr.assumingMemoryBound(to: if_data.self).pointee
+            return (data.ifi_ibytes, data.ifi_obytes)
+        }
+        return nil
     }
 
     private func finishStart(error: Error, completionHandler: @escaping (Error?) -> Void) {
