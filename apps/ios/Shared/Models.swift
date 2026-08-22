@@ -151,7 +151,8 @@ struct SubscribeData: Codable {
 private func lenientInt64<K: CodingKey>(_ container: KeyedDecodingContainer<K>, _ key: K) -> Int64? {
     if let value = try? container.decodeIfPresent(Int64.self, forKey: key) { return value }
     if let value = try? container.decodeIfPresent(Double.self, forKey: key) { return Int64(value) }
-    if let text = try? container.decodeIfPresent(String.self, forKey: key) { return text.flatMap { Int64($0) } }
+    if let text = try? container.decodeIfPresent(String.self, forKey: key),
+       let str = text { return Int64(str) }
     return nil
 }
 
