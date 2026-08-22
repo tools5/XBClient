@@ -16,13 +16,12 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
@@ -82,7 +81,10 @@ private fun PlanRow(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .animateContentSize(animationSpec = tween(180)),
+            .animateContentSize(animationSpec = tween(180))
+            .xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
         insideMargin = PaddingValues(18.dp),
         pressFeedbackType = PressFeedbackType.None,
         showIndication = false
@@ -98,14 +100,15 @@ private fun PlanRow(
             if (plan.prices.isEmpty()) {
                 Spacer(Modifier.width(12.dp))
                 Card(
-                    colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.secondaryContainer),
-                    cornerRadius = 50.dp,
+                    colors = CardDefaults.defaultColors(color = Color.Transparent),
+                    cornerRadius = XbControlRadius,
+                    modifier = Modifier.xbControlBorder(),
                     insideMargin = PaddingValues(horizontal = 12.dp, vertical = 7.dp)
                 ) {
                     Text(
                         planPriceText(plan, currencySymbol, currencyUnit, noPriceText),
                         style = MiuixTheme.textStyles.body2,
-                        color = MiuixTheme.colorScheme.onSecondaryContainer
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary
                     )
                 }
             }
@@ -118,7 +121,7 @@ private fun PlanRow(
         if (plan.prices.isNotEmpty()) {
             Spacer(Modifier.height(14.dp))
             for ((index, price) in plan.prices.withIndex()) {
-                Button(onClick = { onPurchase(price) }, enabled = !paymentLoading, modifier = Modifier.fillMaxWidth()) {
+                XbSecondaryButton(onClick = { onPurchase(price) }, enabled = !paymentLoading, modifier = Modifier.fillMaxWidth()) {
                     Text("${planPriceLabel(price.field)} ${formatMoney(price.amount, currencySymbol, currencyUnit)}")
                 }
                 if (index != plan.prices.lastIndex) {
@@ -146,13 +149,16 @@ internal fun RewardAdSection(
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .padding(bottom = 18.dp)
-            .animateContentSize(animationSpec = tween(180)),
+            .animateContentSize(animationSpec = tween(180))
+            .xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
         insideMargin = PaddingValues(18.dp)
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Card(
                 colors = CardDefaults.defaultColors(color = MiuixTheme.colorScheme.primaryContainer),
-                cornerRadius = 18.dp,
+                cornerRadius = XbCardRadius,
                 modifier = Modifier.size(50.dp),
                 insideMargin = PaddingValues(0.dp)
             ) {
@@ -169,7 +175,7 @@ internal fun RewardAdSection(
             Text(title, style = MiuixTheme.textStyles.title2, modifier = Modifier.weight(1f))
         }
         Spacer(Modifier.height(16.dp))
-        Button(onClick = { viewModel.requestRewardAd(scene) }, modifier = Modifier.fillMaxWidth()) {
+        XbSecondaryButton(onClick = { viewModel.requestRewardAd(scene) }, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.reward_watch))
         }
         if (logs.isNotEmpty()) {
@@ -178,10 +184,12 @@ internal fun RewardAdSection(
             Text(stringResource(R.string.reward_recent), style = MiuixTheme.textStyles.title2)
             Spacer(Modifier.height(8.dp))
             for ((index, log) in visibleLogs.withIndex()) {
+                // 正值（已入账）= 绿 tag 色块；失败 / 待入账 = 描边式，不做色块
+                val credited = log.status == "credited"
                 val statusColor = when (log.status) {
-                    "credited" -> MiuixTheme.colorScheme.primary
+                    "credited" -> xbTokens().tagText
                     "failed" -> MiuixTheme.colorScheme.error
-                    else -> MiuixTheme.colorScheme.secondary
+                    else -> xbTokens().textMuted
                 }
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                     Column(Modifier.weight(1f)) {
@@ -193,8 +201,9 @@ internal fun RewardAdSection(
                         }
                     }
                     Card(
-                        colors = CardDefaults.defaultColors(color = statusColor.copy(alpha = 0.12f)),
-                        cornerRadius = 50.dp,
+                        colors = CardDefaults.defaultColors(color = if (credited) xbTokens().tagBg else Color.Transparent),
+                        cornerRadius = XbControlRadius,
+                        modifier = if (credited) Modifier else Modifier.xbOutlineTagBorder(statusColor),
                         insideMargin = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Text(

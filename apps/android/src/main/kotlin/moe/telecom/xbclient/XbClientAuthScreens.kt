@@ -34,13 +34,10 @@ import androidx.compose.ui.state.ToggleableState
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.delay
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Checkbox
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.preference.RadioButtonPreference
 import top.yukonga.miuix.kmp.preference.RadioButtonLocation
@@ -101,7 +98,11 @@ internal fun LanguageOnboardingScreen(state: XbClientUiState, viewModel: XbClien
                             modifier = Modifier.padding(horizontal = 28.dp)
                         )
                         Spacer(Modifier.height(16.dp))
-                        Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+                        Card(
+                            modifier = Modifier.padding(horizontal = 12.dp).xbCardBorder(),
+                            cornerRadius = XbCardRadius,
+                            colors = xbCardColors()
+                        ) {
                             for (item in LanguageOptions) {
                                 RadioButtonPreference(
                                     title = item.second,
@@ -115,12 +116,11 @@ internal fun LanguageOnboardingScreen(state: XbClientUiState, viewModel: XbClien
                             }
                         }
                         Spacer(Modifier.height(20.dp))
-                        Button(
+                        XbPrimaryButton(
                             onClick = { viewModel.finishLanguageOnboarding(selected) },
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(horizontal = 12.dp),
-                            colors = ButtonDefaults.buttonColorsPrimary()
+                                .padding(horizontal = 12.dp)
                         ) {
                             Text(stringResource(R.string.onboarding_continue))
                         }
@@ -162,7 +162,9 @@ internal fun VpnDisclosureScreen(viewModel: XbClientViewModel) {
                 )
                 Spacer(Modifier.height(16.dp))
                 Card(
-                    modifier = Modifier.padding(horizontal = 12.dp),
+                    modifier = Modifier.padding(horizontal = 12.dp).xbCardBorder(),
+                    cornerRadius = XbCardRadius,
+                    colors = xbCardColors(),
                     insideMargin = PaddingValues(18.dp)
                 ) {
                     Text(stringResource(R.string.vpn_disclosure_point_traffic))
@@ -172,12 +174,11 @@ internal fun VpnDisclosureScreen(viewModel: XbClientViewModel) {
                     Text(stringResource(R.string.vpn_disclosure_point_control))
                 }
                 Spacer(Modifier.height(20.dp))
-                Button(
+                XbPrimaryButton(
                     onClick = viewModel::acceptVpnDisclosure,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .padding(horizontal = 12.dp),
-                    colors = ButtonDefaults.buttonColorsPrimary()
+                        .padding(horizontal = 12.dp)
                 ) {
                     Text(stringResource(R.string.vpn_disclosure_accept))
                 }
@@ -196,7 +197,11 @@ internal fun AuthScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
             contentPadding = PaddingValues(vertical = 20.dp)
         ) {
             item {
-                Card(modifier = Modifier.padding(horizontal = 12.dp)) {
+                Card(
+                    modifier = Modifier.padding(horizontal = 12.dp).xbCardBorder(),
+                    cornerRadius = XbCardRadius,
+                    colors = xbCardColors()
+                ) {
                     LanguageChooser(state.appLanguage, viewModel)
                     ThemeChooser(state.themeMode, state.appLanguage, viewModel)
                 }
@@ -248,7 +253,10 @@ private fun LoginContent(state: XbClientUiState, viewModel: XbClientViewModel) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 12.dp)
+                .xbCardBorder(),
+            cornerRadius = XbCardRadius,
+            colors = xbCardColors(),
             insideMargin = PaddingValues(18.dp)
         ) {
             TextField(
@@ -274,15 +282,14 @@ private fun LoginContent(state: XbClientUiState, viewModel: XbClientViewModel) {
                     .fillMaxWidth()
             )
             Spacer(Modifier.height(16.dp))
-            Button(
+            XbPrimaryButton(
                 onClick = { viewModel.login(email, password) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.auth_login))
             }
             Spacer(Modifier.height(8.dp))
-            Button(onClick = viewModel::showRegister, modifier = Modifier.fillMaxWidth()) {
+            XbSecondaryButton(onClick = viewModel::showRegister, modifier = Modifier.fillMaxWidth()) {
                 Text(stringResource(R.string.auth_register_account))
             }
         }
@@ -291,11 +298,14 @@ private fun LoginContent(state: XbClientUiState, viewModel: XbClientViewModel) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 12.dp),
+                    .padding(horizontal = 12.dp)
+                    .xbCardBorder(),
+                cornerRadius = XbCardRadius,
+                colors = xbCardColors(),
                 insideMargin = PaddingValues(18.dp)
             ) {
                 for (provider in state.oauthProviders) {
-                    Button(
+                    XbSecondaryButton(
                         onClick = { viewModel.openOAuthPage("login", provider.driver) },
                         modifier = Modifier.fillMaxWidth()
                     ) {
@@ -327,7 +337,10 @@ private fun RegisterContent(state: XbClientUiState, viewModel: XbClientViewModel
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 12.dp)
+                .xbCardBorder(),
+            cornerRadius = XbCardRadius,
+            colors = xbCardColors(),
             insideMargin = PaddingValues(18.dp)
         ) {
             TextField(
@@ -385,7 +398,7 @@ private fun RegisterContent(state: XbClientUiState, viewModel: XbClientViewModel
             }
             if (state.registerEmailVerifyEnabled) {
                 Spacer(Modifier.height(14.dp))
-                Button(onClick = { viewModel.sendEmailVerify(email, captcha) }, modifier = Modifier.fillMaxWidth()) {
+                XbSecondaryButton(onClick = { viewModel.sendEmailVerify(email, captcha) }, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.auth_send_email_code))
                 }
             }
@@ -394,16 +407,15 @@ private fun RegisterContent(state: XbClientUiState, viewModel: XbClientViewModel
                 RegisterLegalAgreement(legalAccepted, { legalAccepted = it }, context)
                 Spacer(Modifier.height(8.dp))
             }
-            Button(
+            XbPrimaryButton(
                 onClick = { viewModel.register(email, password, inviteCode, emailCode, captcha) },
                 enabled = registerEnabled,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.auth_register))
             }
             Spacer(Modifier.height(8.dp))
-            TextButton(
+            XbTextButton(
                 text = stringResource(R.string.auth_back_login),
                 onClick = viewModel::showLogin,
                 modifier = Modifier.fillMaxWidth()
@@ -411,7 +423,7 @@ private fun RegisterContent(state: XbClientUiState, viewModel: XbClientViewModel
             if (state.oauthProviders.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))
                 for (provider in state.oauthProviders) {
-                    Button(
+                    XbSecondaryButton(
                         onClick = { viewModel.openOAuthPage("register", provider.driver, inviteCode) },
                         enabled = registerEnabled,
                         modifier = Modifier.fillMaxWidth()

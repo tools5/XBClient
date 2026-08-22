@@ -50,7 +50,6 @@ import top.yukonga.miuix.kmp.basic.NavigationBarItem
 import top.yukonga.miuix.kmp.basic.PullToRefresh
 import top.yukonga.miuix.kmp.basic.Scaffold
 import top.yukonga.miuix.kmp.basic.ScrollBehavior
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TopAppBar
 import top.yukonga.miuix.kmp.blur.layerBackdrop
 import top.yukonga.miuix.kmp.icon.MiuixIcons
@@ -184,7 +183,7 @@ private fun OAuthWebView(url: String, viewModel: XbClientViewModel) {
             TopAppBar(
                 title = stringResource(R.string.oauth_web_title),
                 actions = {
-                    TextButton(
+                    XbTextButton(
                         text = stringResource(R.string.common_close),
                         onClick = viewModel::closeOAuthWebView
                     )

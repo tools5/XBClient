@@ -20,16 +20,14 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import java.util.Locale
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.HorizontalDivider
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.preference.OverlayDropdownPreference
@@ -42,25 +40,30 @@ internal fun ProfileScreen(state: XbClientUiState, viewModel: XbClientViewModel)
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp),
+            .padding(bottom = 12.dp)
+            .xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
         insideMargin = PaddingValues(18.dp)
     ) {
         Text(state.userEmail, style = MiuixTheme.textStyles.title2)
         Spacer(Modifier.height(10.dp))
         Text(
             stringResource(R.string.balance_amount, formatMoney(state.balance, state.currencySymbol, state.currencyUnit)),
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            fontFamily = FontFamily.Monospace
         )
         Spacer(Modifier.height(4.dp))
         Text(
             stringResource(R.string.commission_amount, formatMoney(state.commissionBalance, state.currencySymbol, state.currencyUnit)),
-            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+            fontFamily = FontFamily.Monospace
         )
         Spacer(Modifier.height(8.dp))
         val subscriptionText = state.subscriptionSummary.ifEmpty {
             stringResource(id = if (state.subscribeUrl.isEmpty()) R.string.subscription_not_synced else R.string.subscription_synced)
         }
-        Text(subscriptionText, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+        Text(subscriptionText, color = MiuixTheme.colorScheme.onSurfaceVariantSummary, fontFamily = FontFamily.Monospace)
     }
     PreferenceCard {
         ArrowPreference(title = stringResource(R.string.page_account_security), onClick = { viewModel.openScreen(PassScreen.ACCOUNT_SECURITY) })
@@ -99,7 +102,7 @@ internal fun ProfileScreen(state: XbClientUiState, viewModel: XbClientViewModel)
                                 Text(invite.code, style = MiuixTheme.textStyles.title2)
                                 Text(stringResource(id = if (invite.status == 0) R.string.invite_available else R.string.invite_used), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                             }
-                            TextButton(
+                            XbTextButton(
                                 text = stringResource(R.string.invite_copy),
                                 onClick = {
                                     context.getSystemService(ClipboardManager::class.java)
@@ -114,10 +117,9 @@ internal fun ProfileScreen(state: XbClientUiState, viewModel: XbClientViewModel)
                     }
                 }
                 Spacer(Modifier.height(14.dp))
-                Button(
+                XbPrimaryButton(
                     onClick = viewModel::generateInvite,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColorsPrimary()
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(stringResource(R.string.action_generate_invite))
                 }
@@ -145,7 +147,8 @@ internal fun InviteDetailsScreen(state: XbClientUiState) {
                                 formatMoney(log.orderAmount, state.currencySymbol, state.currencyUnit),
                                 formatMoney(log.getAmount, state.currencySymbol, state.currencyUnit)
                             ),
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontFamily = FontFamily.Monospace
                         )
                         val time = formatUnixTime(log.createdAt)
                         if (time.isNotEmpty()) {
@@ -180,7 +183,8 @@ internal fun TrafficLogsScreen(state: XbClientUiState) {
                                 formatTrafficBytes(log.upload.toDouble()),
                                 formatTrafficBytes(log.download.toDouble())
                             ),
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontFamily = FontFamily.Monospace
                         )
                         Spacer(Modifier.height(2.dp))
                         Text(
@@ -189,7 +193,8 @@ internal fun TrafficLogsScreen(state: XbClientUiState) {
                                 formatTrafficBytes(total.toDouble()),
                                 String.format(Locale.US, "%.2f", log.serverRate)
                             ),
-                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                            color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                            fontFamily = FontFamily.Monospace
                         )
                         if (index != state.trafficLogs.lastIndex) {
                             HorizontalDivider(Modifier.padding(vertical = 12.dp))
@@ -234,17 +239,20 @@ internal fun TicketsScreen(state: XbClientUiState, viewModel: XbClientViewModel)
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(12.dp))
-            Button(
+            XbPrimaryButton(
                 onClick = { viewModel.createTicket(subject, level, message) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.ticket_submit))
             }
         }
     }
     Section(stringResource(R.string.section_my_tickets)) {
-        Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+        Card(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).xbCardBorder(),
+            cornerRadius = XbCardRadius,
+            colors = xbCardColors()
+        ) {
             when {
                 state.ticketsLoading -> Text(stringResource(R.string.ticket_loading), color = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.padding(16.dp))
                 state.tickets.isEmpty() -> Text(stringResource(R.string.ticket_empty), color = MiuixTheme.colorScheme.onSurfaceVariantSummary, modifier = Modifier.padding(16.dp))
@@ -300,12 +308,16 @@ internal fun TicketDetailScreen(state: XbClientUiState, viewModel: XbClientViewM
                             modifier = Modifier.fillMaxWidth()
                         ) {
                             Card(
-                                colors = CardDefaults.defaultColors(
-                                    color = if (message.isMe) MiuixTheme.colorScheme.primaryContainer else MiuixTheme.colorScheme.surface
-                                ),
-                                cornerRadius = 18.dp,
+                                colors = if (message.isMe) {
+                                    CardDefaults.defaultColors(color = MiuixTheme.colorScheme.primaryContainer)
+                                } else {
+                                    xbCardColors()
+                                },
+                                cornerRadius = XbCardRadius,
                                 insideMargin = PaddingValues(14.dp),
-                                modifier = Modifier.fillMaxWidth(0.86f)
+                                modifier = Modifier
+                                    .fillMaxWidth(0.86f)
+                                    .then(if (message.isMe) Modifier else Modifier.xbCardBorder())
                             ) {
                                 Text(message.message)
                                 val time = formatUnixTime(message.createdAt)
@@ -333,15 +345,14 @@ internal fun TicketDetailScreen(state: XbClientUiState, viewModel: XbClientViewM
                     modifier = Modifier.fillMaxWidth()
                 )
                 Spacer(Modifier.height(12.dp))
-                Button(
+                XbPrimaryButton(
                     onClick = { viewModel.replyTicket(reply) },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColorsPrimary()
+                    modifier = Modifier.fillMaxWidth()
                 ) {
                     Text(stringResource(R.string.ticket_reply_submit))
                 }
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = viewModel::closeTicket, modifier = Modifier.fillMaxWidth()) {
+                XbSecondaryButton(onClick = viewModel::closeTicket, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.ticket_close))
                 }
             }
@@ -363,11 +374,10 @@ fun GiftCardsScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(12.dp))
-            Button(
+            XbPrimaryButton(
                 onClick = { viewModel.redeemGiftCard(code) },
                 enabled = code.isNotBlank() && !state.giftCardRedeeming,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(id = if (state.giftCardRedeeming) R.string.gift_redeeming else R.string.gift_redeem))
             }
@@ -412,10 +422,9 @@ fun AccountSecurityScreen(state: XbClientUiState, viewModel: XbClientViewModel) 
                 modifier = Modifier.fillMaxWidth()
             )
             Spacer(Modifier.height(12.dp))
-            Button(
+            XbPrimaryButton(
                 onClick = { viewModel.changePassword(oldPassword, newPassword, confirmPassword) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.password_save))
             }
@@ -440,14 +449,11 @@ fun AccountSecurityScreen(state: XbClientUiState, viewModel: XbClientViewModel) 
                                 )
                             }
                             if (bound) {
-                                Button(onClick = { viewModel.unbindOAuth(provider.driver) }) {
+                                XbSecondaryButton(onClick = { viewModel.unbindOAuth(provider.driver) }) {
                                     Text(stringResource(R.string.oauth_unbind))
                                 }
                             } else {
-                                Button(
-                                    onClick = { viewModel.bindOAuth(provider.driver) },
-                                    colors = ButtonDefaults.buttonColorsPrimary()
-                                ) {
+                                XbPrimaryButton(onClick = { viewModel.bindOAuth(provider.driver) }) {
                                     Text(stringResource(R.string.oauth_bind))
                                 }
                             }
@@ -457,7 +463,7 @@ fun AccountSecurityScreen(state: XbClientUiState, viewModel: XbClientViewModel) 
                         }
                     }
                     Spacer(Modifier.height(12.dp))
-                    Button(
+                    XbSecondaryButton(
                         onClick = { viewModel.refreshOAuthBindings(force = true, showLoading = true, showErrors = true) },
                         modifier = Modifier.fillMaxWidth()
                     ) {

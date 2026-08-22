@@ -30,15 +30,14 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
-import top.yukonga.miuix.kmp.basic.CardDefaults
 import top.yukonga.miuix.kmp.basic.IconButton
 import top.yukonga.miuix.kmp.basic.LinearProgressIndicator
 import top.yukonga.miuix.kmp.basic.Text
@@ -111,6 +110,8 @@ internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
                 .fillMaxWidth()
                 .padding(horizontal = 12.dp)
                 .padding(bottom = 12.dp),
+            cornerRadius = XbCardRadius,
+            colors = xbImportantCardColors(),
             insideMargin = PaddingValues(18.dp)
         ) {
             Text(blockTitle, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
@@ -118,13 +119,12 @@ internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
             Text(blockDescription, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
             if (state.subscriptionSummary.isNotEmpty()) {
                 Spacer(Modifier.height(8.dp))
-                Text(state.subscriptionSummary, style = MiuixTheme.textStyles.title2)
+                Text(state.subscriptionSummary, style = MiuixTheme.textStyles.title2, fontFamily = FontFamily.Monospace)
             }
             Spacer(Modifier.height(14.dp))
-            Button(
+            XbPrimaryButton(
                 onClick = { viewModel.openScreen(PassScreen.PLANS) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(R.string.subscription_redeem_button))
             }
@@ -162,12 +162,19 @@ internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp),
+                .padding(horizontal = 12.dp)
+                .xbCardBorder(),
+            cornerRadius = XbCardRadius,
+            colors = xbCardColors(),
             insideMargin = PaddingValues(18.dp)
         ) {
             Text(stringResource(R.string.section_traffic), fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(4.dp))
-            Text(state.subscriptionSummary, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
+            Text(
+                state.subscriptionSummary,
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                fontFamily = FontFamily.Monospace
+            )
             if (state.subscriptionTrafficTotalBytes > 0L) {
                 Spacer(Modifier.height(12.dp))
                 LinearProgressIndicator(
@@ -180,7 +187,8 @@ internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
                 Text(
                     "${stringResource(R.string.session_traffic)} · ${formatTrafficBytes((state.vpnSessionRxBytes + state.vpnSessionTxBytes).toDouble())}",
                     style = MiuixTheme.textStyles.body2,
-                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+                    color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                    fontFamily = FontFamily.Monospace
                 )
             }
         }
@@ -209,12 +217,16 @@ private fun ConnectionStatusCard(state: XbClientUiState, now: Long, onToggle: ()
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
             .animateContentSize(animationSpec = tween(180)),
-        colors = CardDefaults.defaultColors(
-            color = if (connected) MiuixTheme.colorScheme.secondaryContainer else MiuixTheme.colorScheme.surfaceContainer
-        ),
+        cornerRadius = XbCardRadius,
+        colors = xbImportantCardColors(),
         insideMargin = PaddingValues(18.dp)
     ) {
-        Text(statusText, fontSize = 22.sp, fontWeight = FontWeight.SemiBold)
+        Text(
+            statusText,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.SemiBold,
+            color = if (connected) xbTokens().accent else xbTokens().textPrimary
+        )
         if (state.vpnRequested) {
             Spacer(Modifier.height(6.dp))
             AnimatedContent(
@@ -222,7 +234,7 @@ private fun ConnectionStatusCard(state: XbClientUiState, now: Long, onToggle: ()
                 transitionSpec = { contentTransition() },
                 label = "connection-duration"
             ) { text ->
-                Text(text, style = MiuixTheme.textStyles.title2)
+                Text(text, style = MiuixTheme.textStyles.title2, fontFamily = FontFamily.Monospace)
             }
         } else {
             Spacer(Modifier.height(6.dp))
@@ -232,8 +244,11 @@ private fun ConnectionStatusCard(state: XbClientUiState, now: Long, onToggle: ()
         Button(
             onClick = onToggle,
             enabled = !state.vpnStarting,
-            modifier = Modifier.fillMaxWidth(),
-            colors = if (state.vpnRequested) ButtonDefaults.buttonColors() else ButtonDefaults.buttonColorsPrimary()
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (state.vpnRequested) Modifier.xbControlBorder() else Modifier),
+            cornerRadius = XbControlRadius,
+            colors = if (state.vpnRequested) xbSecondaryButtonColors() else xbPrimaryButtonColors()
         ) {
             AnimatedContent(targetState = actionText, transitionSpec = { contentTransition() }, label = "connection-action") { text ->
                 Text(text)
@@ -273,7 +288,7 @@ private fun LatencyChart(samples: List<Int>, modifier: Modifier = Modifier) {
 private fun SpeedChart(upload: List<Long>, download: List<Long>, modifier: Modifier = Modifier) {
     val gridColor = MiuixTheme.colorScheme.outline
     val upColor = MiuixTheme.colorScheme.primary
-    val downColor = MiuixTheme.colorScheme.secondary
+    val downColor = xbTokens().textMuted
     val curUp = upload.lastOrNull() ?: 0L
     val curDown = download.lastOrNull() ?: 0L
     val header = "↑${formatTrafficBytes(curUp.toDouble())}/s ↓${formatTrafficBytes(curDown.toDouble())}/s"
@@ -311,11 +326,17 @@ private fun ChartCard(
     headerColor: Color,
     draw: androidx.compose.ui.graphics.drawscope.DrawScope.() -> Unit,
 ) {
-    Card(modifier = modifier, insideMargin = PaddingValues(12.dp)) {
+    Card(
+        modifier = modifier.xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
+        insideMargin = PaddingValues(12.dp)
+    ) {
         Text(
             header,
             style = MiuixTheme.textStyles.body2,
             color = headerColor,
+            fontFamily = FontFamily.Monospace,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
@@ -334,7 +355,7 @@ internal fun NodeSelectScreen(state: XbClientUiState, viewModel: XbClientViewMod
         item {
             if (!state.subscriptionBlocked && state.anyTlsNodes.isNotEmpty()) {
                 Row(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp), horizontalArrangement = Arrangement.End) {
-                    Button(
+                    XbSecondaryButton(
                         onClick = viewModel::testAllNodes,
                         enabled = !state.nodesTesting
                     ) {
@@ -362,16 +383,17 @@ internal fun NodeSelectScreen(state: XbClientUiState, viewModel: XbClientViewMod
                         .fillMaxWidth()
                         .padding(horizontal = 12.dp)
                         .padding(top = 12.dp),
+                    cornerRadius = XbCardRadius,
+                    colors = xbImportantCardColors(),
                     insideMargin = PaddingValues(18.dp)
                 ) {
                     Text(blockTitle, style = MiuixTheme.textStyles.title2)
                     Spacer(Modifier.height(8.dp))
                     Text(blockDescription, color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                     Spacer(Modifier.height(14.dp))
-                    Button(
+                    XbPrimaryButton(
                         onClick = { viewModel.openScreen(PassScreen.PLANS) },
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.buttonColorsPrimary()
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(stringResource(R.string.subscription_redeem_button))
                     }
@@ -397,6 +419,9 @@ internal fun NodeSelectScreen(state: XbClientUiState, viewModel: XbClientViewMod
                             .padding(horizontal = 12.dp)
                             .padding(top = if (index == 0) 12.dp else 0.dp)
                             .padding(bottom = 8.dp)
+                            .then(if (node.isInfo) Modifier.xbInfoFrame() else Modifier.xbCardBorder(listRow = true)),
+                        cornerRadius = XbCardRadius,
+                        colors = xbCardColors()
                     ) {
                         NodeRow(
                             index = index,
@@ -422,17 +447,14 @@ private fun NodeRow(
     onTest: () -> Unit,
     onSelect: () -> Unit
 ) {
-    // 信息条目（订阅公告伪节点）：弱化展示、不可点击连接、无测速按钮
+    // 信息条目（订阅公告伪节点）：虚线边框 + 50% 透明（由外层卡片的 xbInfoFrame 承担），不可点击连接、无测速按钮
     if (node.isInfo) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 14.dp)
         ) {
-            Text(
-                node.name.trim().ifEmpty { node.displayName(index, stringResource(R.string.node_default_name, index + 1)) },
-                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
-            )
+            Text(node.name.trim().ifEmpty { node.displayName(index, stringResource(R.string.node_default_name, index + 1)) })
         }
         return
     }

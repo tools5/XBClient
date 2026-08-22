@@ -18,6 +18,7 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,6 +31,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -40,11 +42,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.SmallTitle
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.basic.TextField
 import top.yukonga.miuix.kmp.blur.BlendColorEntry
 import top.yukonga.miuix.kmp.blur.BlurColors
@@ -100,12 +100,25 @@ internal val OnboardingLanguageSubtitles = mapOf(
 @Composable
 fun XbClientTheme(themeMode: String, content: @Composable () -> Unit) {
     val mode = when (themeMode) {
-        "dark" -> ColorSchemeMode.MonetDark
-        "light" -> ColorSchemeMode.MonetLight
-        else -> ColorSchemeMode.MonetSystem
+        "dark" -> ColorSchemeMode.Dark
+        "light" -> ColorSchemeMode.Light
+        else -> ColorSchemeMode.System
     }
-    val controller = remember(mode) { ThemeController(mode) }
-    MiuixTheme(controller = controller, content = content)
+    val dark = when (themeMode) {
+        "dark" -> true
+        "light" -> false
+        else -> isSystemInDarkTheme()
+    }
+    val controller = remember(mode) {
+        ThemeController(
+            colorSchemeMode = mode,
+            lightColors = xbLightColorScheme(),
+            darkColors = xbDarkColorScheme()
+        )
+    }
+    CompositionLocalProvider(LocalXbTokens provides if (dark) XbDarkTokens else XbLightTokens) {
+        MiuixTheme(controller = controller, content = content)
+    }
 }
 
 @Composable
@@ -159,7 +172,10 @@ fun Panel(content: @Composable ColumnScope.() -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 12.dp)
+            .xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
         insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp),
         content = content
     )
@@ -174,7 +190,10 @@ internal fun PreferenceCard(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp),
+            .padding(bottom = 12.dp)
+            .xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
         content = content
     )
 }
@@ -241,20 +260,20 @@ internal fun EditPreference(
                 .padding(bottom = 16.dp)
         )
         Row(horizontalArrangement = Arrangement.SpaceBetween, modifier = Modifier.fillMaxWidth()) {
-            TextButton(
+            XbTextButton(
                 text = stringResource(android.R.string.cancel),
                 onClick = { show = false },
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.width(20.dp))
-            TextButton(
+            XbTextButton(
                 text = stringResource(R.string.common_confirm),
                 onClick = {
                     onConfirm(draft)
                     show = false
                 },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
+                primary = true
             )
         }
     }

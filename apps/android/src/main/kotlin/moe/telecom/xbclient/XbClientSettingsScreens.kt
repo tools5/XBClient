@@ -31,8 +31,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import java.util.Locale
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
 import top.yukonga.miuix.kmp.basic.Icon
 import top.yukonga.miuix.kmp.basic.Text
@@ -119,7 +117,10 @@ internal fun SettingsScreen(state: XbClientUiState, viewModel: XbClientViewModel
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 12.dp)
-            .padding(bottom = 12.dp),
+            .padding(bottom = 12.dp)
+            .xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
         insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
@@ -162,14 +163,13 @@ internal fun SettingsScreen(state: XbClientUiState, viewModel: XbClientViewModel
         Text(stringResource(R.string.traffic_rules_config_help), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(
+            XbPrimaryButton(
                 onClick = { viewModel.saveRouteConfigYaml(customRouteConfigYaml, geoipDir) },
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.weight(1f)
             ) {
                 Text(stringResource(R.string.common_save_settings))
             }
-            Button(
+            XbSecondaryButton(
                 onClick = {
                     customRouteConfigYaml = ""
                     viewModel.saveRouteConfigYaml("", geoipDir)
@@ -342,7 +342,10 @@ internal fun AppRulesScreen(state: XbClientUiState, viewModel: XbClientViewModel
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = 12.dp)
-                    .padding(bottom = 12.dp),
+                    .padding(bottom = 12.dp)
+                    .xbCardBorder(),
+                cornerRadius = XbCardRadius,
+                colors = xbCardColors(),
                 insideMargin = PaddingValues(horizontal = 16.dp, vertical = 14.dp)
             ) {
                 TextField(
@@ -356,14 +359,22 @@ internal fun AppRulesScreen(state: XbClientUiState, viewModel: XbClientViewModel
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.app_rules_selected_count, packages.size), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
                 Spacer(Modifier.height(8.dp))
-                Button(onClick = viewModel::clearSelectedApps, modifier = Modifier.fillMaxWidth()) {
+                XbSecondaryButton(onClick = viewModel::clearSelectedApps, modifier = Modifier.fillMaxWidth()) {
                     Text(stringResource(R.string.common_clear_selection))
                 }
             }
         }
         items(apps, key = { it.packageName }) { app ->
             val selected = packages.contains(app.packageName)
-            Card(modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp).padding(bottom = 8.dp)) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 12.dp)
+                    .padding(bottom = 8.dp)
+                    .xbCardBorder(listRow = true),
+                cornerRadius = XbCardRadius,
+                colors = xbCardColors()
+            ) {
                 CheckboxPreference(
                     title = app.label,
                     summary = app.packageName,

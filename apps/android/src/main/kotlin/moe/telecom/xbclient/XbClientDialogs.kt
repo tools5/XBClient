@@ -22,11 +22,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import top.yukonga.miuix.kmp.basic.Button
-import top.yukonga.miuix.kmp.basic.ButtonDefaults
 import top.yukonga.miuix.kmp.basic.Card
+import top.yukonga.miuix.kmp.basic.CardColors
 import top.yukonga.miuix.kmp.basic.Text
-import top.yukonga.miuix.kmp.basic.TextButton
 import top.yukonga.miuix.kmp.overlay.OverlayDialog
 import top.yukonga.miuix.kmp.preference.ArrowPreference
 import top.yukonga.miuix.kmp.theme.MiuixTheme
@@ -47,22 +45,23 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
         Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
             Card(
                 modifier = Modifier.size(58.dp),
+                cornerRadius = XbCardRadius,
+                colors = CardColors(color = xbTokens().tagBg, contentColor = xbTokens().tagText),
                 insideMargin = PaddingValues(0.dp)
             ) {
                 Box(Modifier.fillMaxWidth().height(58.dp), contentAlignment = Alignment.Center) {
                     Image(
                         painter = painterResource(R.drawable.ic_gift),
                         contentDescription = null,
-                        colorFilter = ColorFilter.tint(MiuixTheme.colorScheme.onSecondaryContainer),
+                        colorFilter = ColorFilter.tint(xbTokens().tagText),
                         modifier = Modifier.size(30.dp)
                     )
                 }
             }
             Spacer(Modifier.height(16.dp))
-            Button(
+            XbPrimaryButton(
                 onClick = viewModel::dismissRewardCreditedDialog,
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.buttonColorsPrimary()
+                modifier = Modifier.fillMaxWidth()
             ) {
                 Text(stringResource(android.R.string.ok))
             }
@@ -75,17 +74,17 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
         onDismissRequest = viewModel::dismissUpdateDialog
     ) {
         Row(modifier = Modifier.fillMaxWidth()) {
-            TextButton(
+            XbTextButton(
                 text = stringResource(R.string.common_later),
                 onClick = viewModel::dismissUpdateDialog,
                 modifier = Modifier.weight(1f)
             )
             Spacer(Modifier.size(12.dp))
-            TextButton(
+            XbTextButton(
                 text = stringResource(id = if (state.latestDownloadUrl.isEmpty()) R.string.update_open_release else R.string.update_download),
                 onClick = { viewModel.openUpdatePage(context) },
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.textButtonColorsPrimary()
+                primary = true
             )
         }
     }
@@ -97,13 +96,22 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
     ) {
         Column(modifier = Modifier.fillMaxWidth()) {
             state.paymentMethods.forEachIndexed { index, method ->
-                Button(
-                    onClick = { viewModel.checkoutPlanWithMethod(method.id) },
-                    enabled = !state.paymentLoading,
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = if (index == 0) ButtonDefaults.buttonColorsPrimary() else ButtonDefaults.buttonColors()
-                ) {
-                    Text(method.name)
+                if (index == 0) {
+                    XbPrimaryButton(
+                        onClick = { viewModel.checkoutPlanWithMethod(method.id) },
+                        enabled = !state.paymentLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(method.name)
+                    }
+                } else {
+                    XbSecondaryButton(
+                        onClick = { viewModel.checkoutPlanWithMethod(method.id) },
+                        enabled = !state.paymentLoading,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(method.name)
+                    }
                 }
                 if (index != state.paymentMethods.lastIndex) Spacer(Modifier.height(10.dp))
             }
@@ -125,7 +133,7 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
             }
         }
         Spacer(Modifier.height(12.dp))
-        TextButton(
+        XbTextButton(
             text = stringResource(R.string.common_close),
             onClick = viewModel::dismissNotices,
             modifier = Modifier.fillMaxWidth()
@@ -139,12 +147,12 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
         LazyColumn(Modifier.heightIn(max = 520.dp)) {
             itemsIndexed(state.anyTlsNodes, key = { index, node -> "${node.displayName(index)}-$index" }) { index, node ->
                 if (node.isInfo) {
-                    // 信息条目（订阅公告伪节点）：弱化展示、不可点击连接
+                    // 信息条目（订阅公告伪节点）：虚线边框 + 50% 透明，不可点击连接
                     Text(
                         node.name.trim().ifEmpty { node.displayName(index, stringResource(R.string.node_default_name, index + 1)) },
-                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
                         modifier = Modifier
                             .fillMaxWidth()
+                            .xbInfoFrame(XbControlRadius)
                             .padding(horizontal = 16.dp, vertical = 12.dp)
                     )
                 } else {
@@ -170,7 +178,9 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
 @Composable
 internal fun NoticeCard(notice: NoticeItem) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier.fillMaxWidth().xbCardBorder(),
+        cornerRadius = XbCardRadius,
+        colors = xbCardColors(),
         insideMargin = PaddingValues(16.dp)
     ) {
         if (notice.title.isNotBlank()) {
