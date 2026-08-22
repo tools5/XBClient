@@ -32,6 +32,15 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 0) 选用镜像上最新的 Xcode：macos-14 默认 xcode-select 指向 15.4，
+      #    而 XcodeGen 2.45 生成的工程格式（objectVersion）15.4 读不了（Unable to read project）。
+      - name: Select latest Xcode
+        run: |
+          set -euo pipefail
+          LATEST=$(ls -d /Applications/Xcode_*.app 2>/dev/null | sort -V | tail -1 || true)
+          sudo xcode-select -s "${LATEST:-/Applications/Xcode.app}"
+          xcodebuild -version
+
       # 1) Rust 静态库（真机 aarch64-apple-ios，绝不用 -sim）
       - name: Add iOS Rust target
         run: rustup target add aarch64-apple-ios
