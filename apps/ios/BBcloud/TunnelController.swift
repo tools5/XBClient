@@ -1,9 +1,13 @@
 import Foundation
 import NetworkExtension
 
-// App 侧控制面：管理 NETunnelProviderManager（加载/保存/启停），把粘贴的 node JSON
+// App 侧控制面：管理 NETunnelProviderManager（加载/保存/启停），把节点 JSON
 // 落到 App Group 文件、只用 providerConfiguration 传文件名，并读取扩展写回的 status.json
 //（Darwin 通知推 + NEVPNStatus 变更）。不做任何隧道重活。
+//
+// 连接前在 App 侧做 DNS 预解析（host→IP、sni←原域名），与 Android resolveNodeHost /
+// 桌面 aerionNodeWithResolvedHost 行为一致：扩展与内核拿到的是 IP 直连节点，
+// 避免核心在隧道路由生效后再走系统 DNS 造成回环。
 @MainActor
 final class TunnelController: ObservableObject {
     @Published var status: TunnelStatus = .empty
@@ -19,13 +23,51 @@ final class TunnelController: ObservableObject {
         Task { await loadManager() }
     }
 
-    // 连接：校验并落盘 node JSON → 保存/启用 manager → startVPNTunnel。
+    // MARK: - 连接
+
+    // 新路径：AppNode → DNS 预解析（host 换 IP、sni 补原域名）→ 落盘 → 启动隧道。
+    func connect(node: AppNode) async {
+        lastError = ""
+        let rawJson = node.rawJson
+        let resolvedJSON: String
+        do {
+            // getaddrinfo 是阻塞调用，挪到后台线程，避免卡 UI。
+            resolvedJSON = try await Task.detached(priority: .userInitiated) {
+                try DNSResolver.resolveNodeJSON(rawJson)
+            }.value
+        } catch {
+            lastError = "节点解析失败：\(error.localizedDescription)"
+            return
+        }
+        await startTunnel(with: resolvedJSON)
+    }
+
+    // 兼容路径：直接给 node JSON 字符串（调试/粘贴用）。校验 → 落盘 → 启动。
     func connect(nodeJSON: String) async {
         lastError = ""
         let trimmed = nodeJSON.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let data = trimmed.data(using: .utf8),
               (try? JSONSerialization.jsonObject(with: data)) is [String: Any] else {
             lastError = "节点 JSON 无效：顶层必须是一个对象"
+            return
+        }
+        await startTunnel(with: trimmed)
+    }
+
+    func disconnect() {
+        manager?.connection.stopVPNTunnel()
+    }
+
+    func refreshStatus() {
+        status = StatusChannel.read()
+    }
+
+    // MARK: - 启动尾程
+
+    // 共用尾程：把（已解析的）node JSON 写入 App Group → 保存/启用 manager → startVPNTunnel。
+    private func startTunnel(with nodeJSON: String) async {
+        guard let data = nodeJSON.data(using: .utf8) else {
+            lastError = "节点 JSON 编码失败"
             return
         }
         do {
@@ -40,14 +82,6 @@ final class TunnelController: ObservableObject {
         } catch {
             lastError = "启动隧道失败：\(error.localizedDescription)"
         }
-    }
-
-    func disconnect() {
-        manager?.connection.stopVPNTunnel()
-    }
-
-    func refreshStatus() {
-        status = StatusChannel.read()
     }
 
     // MARK: - Manager
