@@ -3,9 +3,29 @@ import Foundation
 // App 与 PacketTunnel 扩展共用的常量与状态通道。两端必须引用同一份，
 // 任何 id/文件名/通知名不一致都会导致 IPC 或容器绑定失败。
 enum AerionShared {
-    // 标识符：与 project.yml / entitlements / Info.plist / CI 完全一致。
-    static let appGroupID = "group.moe.telecom.xbclient"
-    static let tunnelBundleID = "moe.telecom.xbclient.PacketTunnel"
+    // 基础标识符（CI/entitlements 原始值）。ReSign 重签会追加 TeamID 后缀，
+    // 下面用 Bundle.main 动态适配，避免硬编码与实际签名不一致导致崩溃。
+    private static let baseAppGroupID = "group.moe.telecom.xbclient"
+    private static let baseBundleID = "moe.telecom.xbclient"
+
+    // 动态 App Group ID：先尝试与运行时 bundle ID 匹配的 group，再回退基础值。
+    static var appGroupID: String {
+        let mainID = Bundle.main.bundleIdentifier ?? baseBundleID
+        // ReSign 把 bundle ID 改为 <base>.TeamID，App Group 也变成 group.<base>.TeamID
+        let candidates = ["group.\(mainID)", baseAppGroupID]
+        for gid in candidates {
+            if FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: gid) != nil {
+                return gid
+            }
+        }
+        return baseAppGroupID
+    }
+
+    // 动态 tunnel bundle ID：主 App 的 bundleID + ".PacketTunnel"
+    static var tunnelBundleID: String {
+        let mainID = Bundle.main.bundleIdentifier ?? baseBundleID
+        return "\(mainID).PacketTunnel"
+    }
 
     // App → 扩展：App 把粘贴的 node JSON 落到 App Group 容器文件，
     // providerConfiguration 只带文件名这一小键（providerConfiguration 有体积限制）。
@@ -17,12 +37,16 @@ enum AerionShared {
     static let statusFileName = "status.json"
     static let statusChangedNotification = "moe.telecom.xbclient.status-changed"
 
-    // App Group 容器：拿不到即硬失败，让问题立刻暴露（勿静默回退）。
+    // App Group 容器：先尝试动态 group，拿不到则降级到本地 Documents（初期测试可用，
+    // 但 App↔扩展 IPC 将不通——两者看不到同一个容器）。
     static func containerURL() -> URL {
-        guard let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) else {
-            fatalError("App Group 容器不可用：\(appGroupID)")
+        if let url = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroupID) {
+            return url
         }
-        return url
+        // 降级：至少让 App 不崩溃。扩展侧也会走到这里，只是两者路径不同、文件不共享。
+        let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
+        try? FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
+        return docs
     }
 
     static var nodeFileURL: URL { containerURL().appendingPathComponent(nodeFileName) }
