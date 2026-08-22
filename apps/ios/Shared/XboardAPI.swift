@@ -49,6 +49,12 @@ final class XboardAPI {
     /// 订阅协议过滤参数。
     static let subscriptionNodeTypes = "anytls,hysteria,hysteria2,trojan,vless,vmess,shadowsocks,ss,tuic"
 
+    /// 识别订阅模板下发的信息伪节点（展示流量/到期/官网等，非真实可选节点）。
+    static func isInfoPseudoNode(name: String) -> Bool {
+        let prefixes = ["剩余流量", "套餐到期", "距离下次重置", "官网", "过期时间", "最新网址"]
+        return prefixes.contains { name.hasPrefix($0) }
+    }
+
     /// 用户面板地址，如 "https://panel.example.com"（可不带 scheme，默认补 https）。
     var baseURL: String
     /// 登录后获得的 auth_data；login 成功会自动写入。
@@ -154,6 +160,9 @@ final class XboardAPI {
             guard let name = Self.stringValue(node["name"]), !name.isEmpty else {
                 throw XboardAPIError.invalidProxy(index: index, reason: "缺少 name 字段")
             }
+            // 面板订阅模板会塞“剩余流量：/套餐到期：”等信息伪节点（指向真实服务器但
+            // 仅作展示用），不进节点列表——流量/到期信息由订阅页专门展示。
+            if Self.isInfoPseudoNode(name: name) { continue }
             guard let host = Self.stringValue(node["host"]), !host.isEmpty else {
                 throw XboardAPIError.invalidProxy(index: index, reason: "缺少 host/server 字段")
             }

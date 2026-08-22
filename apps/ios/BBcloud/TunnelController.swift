@@ -31,10 +31,9 @@ final class TunnelController: ObservableObject {
         let rawJson = node.rawJson
         let resolvedJSON: String
         do {
-            // getaddrinfo 是阻塞调用，挪到后台线程，避免卡 UI。
-            resolvedJSON = try await Task.detached(priority: .userInitiated) {
-                try DNSResolver.resolveNodeJSON(rawJson)
-            }.value
+            // 可信解析（DoH 优先）：系统 DNS 可能被其他 fake-ip 代理客户端污染，
+            // 解析出 198.18.x.x 会让隧道直连一个不存在的地址。
+            resolvedJSON = try await DNSResolver.resolveNodeJSONTrusted(rawJson)
         } catch {
             lastError = "节点解析失败：\(error.localizedDescription)"
             return

@@ -6,6 +6,8 @@ import SwiftUI
 struct NodeListView: View {
     @EnvironmentObject private var appState: AppState
     @State private var searchText = ""
+    // 长按失败徽章时展示的错误详情（非 nil 即弹窗）。
+    @State private var latencyErrorMessage: String?
 
     var body: some View {
         NavigationStack {
@@ -21,6 +23,17 @@ struct NodeListView: View {
             .navigationTitle("节点")
             .searchable(text: $searchText, prompt: "搜索节点名或协议")
             .refreshable { await appState.loadNodes() }
+            .alert(
+                "测速失败",
+                isPresented: Binding(
+                    get: { latencyErrorMessage != nil },
+                    set: { if !$0 { latencyErrorMessage = nil } }
+                )
+            ) {
+                Button("好", role: .cancel) {}
+            } message: {
+                Text(latencyErrorMessage ?? "")
+            }
             .task {
                 if appState.nodes.isEmpty && !appState.isLoadingNodes {
                     await appState.loadNodes()
@@ -82,17 +95,23 @@ struct NodeListView: View {
                     .lineLimit(1)
                 HStack(spacing: 6) {
                     NodeTypeBadge(type: item.node.type)
-                    Text("\(item.node.host):\(item.node.port)")
+                    // String(port)：SwiftUI Text 的 Int 插值会按 locale 加千分位（42,051）。
+                    Text("\(item.node.host):\(String(item.node.port))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
                 }
             }
             Spacer(minLength: 8)
-            // 延迟徽章：点徽章单测该节点（内层手势优先于整行的选中手势）。
+            // 延迟徽章：点徽章单测该节点；测速失败后长按徽章看错误详情。
             LatencyBadge(outcome: appState.latency[item.id] ?? .idle)
                 .onTapGesture {
                     Task { await appState.testLatency(item) }
+                }
+                .onLongPressGesture {
+                    if case .failed(let message) = appState.latency[item.id] {
+                        latencyErrorMessage = message
+                    }
                 }
             Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                 .foregroundStyle(isSelected ? Color.blue : Color(.systemGray4))

@@ -131,7 +131,8 @@ struct HomeView: View {
                                 .lineLimit(1)
                             NodeTypeBadge(type: node.type)
                         }
-                        Text("\(node.host):\(node.port)")
+                        // String(port)：SwiftUI Text 的 Int 插值会按 locale 加千分位（42,051）。
+                        Text("\(node.host):\(String(node.port))")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }

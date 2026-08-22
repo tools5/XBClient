@@ -51,9 +51,18 @@ enum NodeLatencyTester {
         targetTLS: Bool = false,
         timeoutMs: Int = defaultTimeoutMs
     ) async -> Outcome {
+        // 节点域名先做可信 DNS 预解析（DoH 优先，拒绝 fake-ip）：内核在 App 进程里
+        // 走系统 DNS，若被其他代理客户端的 fake-ip 污染会解析出 198.18.x.x，
+        // 直连必然超时——这是「全部节点测速超时」的头号原因。
+        let resolvedJson: String
+        do {
+            resolvedJson = try await DNSResolver.resolveNodeJSONTrusted(node.rawJson)
+        } catch {
+            return .failed("域名解析失败：\(node.host)")
+        }
         // rawJson 是字符串，转回 JSON 对象内嵌到请求里（不能作为字符串字段传）。
         guard
-            let nodeData = node.rawJson.data(using: .utf8),
+            let nodeData = resolvedJson.data(using: .utf8),
             let nodeObject = try? JSONSerialization.jsonObject(with: nodeData)
         else {
             return .failed("节点配置解析失败")
