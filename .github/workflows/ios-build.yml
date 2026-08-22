@@ -3,7 +3,9 @@ name: iOS Build
 run-name: iOS Build · ${{ github.head_ref || github.ref_name }} · @${{ github.actor }} · #${{ github.run_number }}
 
 # 打包本切片：Rust 内核交叉编译 → XcodeGen 生成工程 → xcodebuild 关签名归档 →
-# 组装未签名 IPA。用户拿到 IPA 后用 ReSign + 本地证书重签再安装。
+# ldid 伪签名（注入 entitlements）→ 打成 IPA。
+# 产出两个 IPA：BBcloud.ipa（ldid 伪签名，供巨魔R/TrollStore 安装）
+#              BBcloud-unsigned.ipa（未签名，供 ReSign 证书重签）。
 # 本地无法构建 iOS（Windows 无 Xcode），此工作流是唯一验证门禁。
 
 on:
@@ -25,7 +27,7 @@ concurrency:
 
 jobs:
   build-ipa:
-    name: BBcloud unsigned IPA (aarch64-apple-ios)
+    name: BBcloud IPA (aarch64-apple-ios)
     runs-on: macos-14
     env:
       CARGO_TERM_COLOR: always
@@ -61,8 +63,8 @@ jobs:
           lipo -info apps/ios/Vendor/libaerion_core.a || true
 
       # 3) 生成 Xcode 工程
-      - name: Install XcodeGen
-        run: brew install xcodegen
+      - name: Install XcodeGen and ldid
+        run: brew install xcodegen ldid
 
       - name: Generate Xcode project
         run: cd apps/ios && xcodegen generate
@@ -82,22 +84,48 @@ jobs:
             IPHONEOS_DEPLOYMENT_TARGET=17.0 \
             clean archive
 
-      # 5) 组装 Payload/ — 未签名，由用户 ReSign + 证书重签
+      # 5) 组装 Payload/ 并产出两个 IPA
       - name: Assemble Payload
         run: |
           set -euo pipefail
           mkdir -p build/Payload
           cp -R build/BBcloud.xcarchive/Products/Applications/BBcloud.app build/Payload/
 
-      # 6) 打成 IPA（未签名，需 ReSign 重签后安装）
-      - name: Zip IPA
+      # 5a) 未签名 IPA（供 ReSign 证书重签）
+      - name: Zip unsigned IPA
+        run: cd build && zip -qr BBcloud-unsigned.ipa Payload && ls -la BBcloud-unsigned.ipa
+
+      # 5b) ldid 伪签名（注入 entitlements，供巨魔R/TrollStore）
+      - name: ldid pseudo-sign
         run: |
           set -euo pipefail
-          cd build && zip -qr BBcloud.ipa Payload && ls -la BBcloud.ipa
+          APP="build/Payload/BBcloud.app"
+
+          # 内嵌 dylib/framework（若有）
+          if [ -d "$APP/Frameworks" ]; then
+            find "$APP/Frameworks" -type f -name '*.dylib' -print0 | while IFS= read -r -d '' f; do
+              ldid -S "$f"
+            done
+            find "$APP/Frameworks" -type d -name '*.framework' -print0 | while IFS= read -r -d '' fw; do
+              bin="$fw/$(basename "$fw" .framework)"
+              [ -f "$bin" ] && ldid -S "$bin"
+            done
+          fi
+
+          # 扩展（带扩展权限）
+          ldid -Sapps/ios/entitlements/appex.entitlements "$APP/PlugIns/PacketTunnel.appex/PacketTunnel"
+
+          # 主 App（带主 App 权限）
+          ldid -Sapps/ios/entitlements/app.entitlements "$APP/BBcloud"
+
+      # 6) ldid 签名后的 IPA
+      - name: Zip signed IPA
+        run: cd build && zip -qr BBcloud.ipa Payload && ls -la BBcloud.ipa BBcloud-unsigned.ipa
 
       - uses: actions/upload-artifact@v4
         with:
           name: BBcloud-ipa
           path: |
             build/BBcloud.ipa
+            build/BBcloud-unsigned.ipa
             apps/ios/entitlements/
