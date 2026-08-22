@@ -1,0 +1,5 @@
+# CI 生成/复制的产物，不入库（避免与共享源重复、避免陈旧拷贝）。
+Vendor/libaerion_core.a
+AerionCore/aerion_core.h
+BBcloud.xcodeproj/
+build/

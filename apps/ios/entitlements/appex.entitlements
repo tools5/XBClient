@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  PacketTunnel 扩展权限。packet-tunnel-provider + allow-vpn 是 NE 加载的关键；
+  application-groups 必须与主 App 逐字相同（共享容器 / IPC 依赖它）。
+-->
+<plist version="1.0">
+<dict>
+	<key>application-identifier</key>
+	<string>moe.telecom.xbclient.PacketTunnel</string>
+	<key>com.apple.developer.networking.networkextension</key>
+	<array>
+		<string>packet-tunnel-provider</string>
+	</array>
+	<key>com.apple.developer.networking.vpn.api</key>
+	<array>
+		<string>allow-vpn</string>
+	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.moe.telecom.xbclient</string>
+	</array>
+	<key>get-task-allow</key>
+	<true/>
+</dict>
+</plist>

@@ -1,0 +1,1 @@
+# 占位：CI 把交叉编译出的 libaerion_core.a 放在本目录，供 PacketTunnel 链接。

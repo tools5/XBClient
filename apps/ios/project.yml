@@ -1,0 +1,94 @@
+# XcodeGen 工程描述：CI 执行 `xcodegen generate` 生成 BBcloud.xcodeproj。
+# 绝不手写 project.pbxproj。两个 target：
+#   BBcloud     —— SwiftUI 主 App，内嵌扩展，只负责 NETunnelProviderManager 控制面。
+#   PacketTunnel —— NEPacketTunnelProvider 扩展(.appex)，链接 Rust 静态库并真正打隧道。
+# 标识符（bundle id / app group / scheme / 产物名 / 链接路径）必须与 entitlements、
+# Info.plist、.github/workflows/ios-build.yml 完全一致，任一处不符即断构建或废 IPA。
+name: BBcloud
+
+options:
+  bundleIdPrefix: moe.telecom.xbclient
+  deploymentTarget:
+    iOS: "17.0"
+  createIntermediateGroups: true
+  # 无真实 Apple 团队：全程关签名，交由 CI 的 ldid 伪签名。
+  defaultConfig: Release
+
+settings:
+  base:
+    IPHONEOS_DEPLOYMENT_TARGET: "17.0"
+    ENABLE_BITCODE: NO
+    SWIFT_VERSION: "5.0"
+    TARGETED_DEVICE_FAMILY: "1"
+    ONLY_ACTIVE_ARCH: NO
+    DEAD_CODE_STRIPPING: YES
+    # 关签名：xcodebuild 归档时不嵌描述文件、不重签，产物由 ldid 伪签名。
+    CODE_SIGN_STYLE: Manual
+    CODE_SIGNING_ALLOWED: NO
+    CODE_SIGNING_REQUIRED: NO
+    CODE_SIGN_IDENTITY: ""
+    DEVELOPMENT_TEAM: ""
+
+targets:
+  # ---------------- 主 App ----------------
+  BBcloud:
+    type: application
+    platform: iOS
+    sources:
+      - path: BBcloud
+      - path: Shared
+    dependencies:
+      # 内嵌扩展：XcodeGen 自动生成 Embed App Extensions 阶段，放进 BBcloud.app/PlugIns/。
+      # 关签名归档下不做 copy 时签名，交给 ldid。
+      - target: PacketTunnel
+        embed: true
+        codeSign: false
+      - sdk: NetworkExtension.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: moe.telecom.xbclient
+        PRODUCT_NAME: BBcloud
+        INFOPLIST_FILE: BBcloud/Info.plist
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+
+  # ---------------- PacketTunnel 扩展 ----------------
+  PacketTunnel:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: PacketTunnel
+      - path: Shared
+    dependencies:
+      # 系统框架/库：核心内含 rustls/ring TLS 与解析器，tun 栈可能用到 C++。
+      - sdk: NetworkExtension.framework
+      - sdk: Security.framework
+      - sdk: Network.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: CoreFoundation.framework
+      - sdk: libresolv.tbd
+      - sdk: libc++.tbd
+      - sdk: libz.tbd
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: moe.telecom.xbclient.PacketTunnel
+        PRODUCT_NAME: PacketTunnel
+        INFOPLIST_FILE: PacketTunnel/Info.plist
+        MARKETING_VERSION: "0.1.0"
+        CURRENT_PROJECT_VERSION: "1"
+        # Rust 静态库：CI 把 libaerion_core.a 放到 Vendor/，C 头 + module.modulemap 放到 AerionCore/。
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/Vendor
+        OTHER_LDFLAGS: -laerion_core
+        # 让 Swift 通过 module map 看到 aerion_core.h：import AerionCore。
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/AerionCore
+        HEADER_SEARCH_PATHS: $(SRCROOT)/AerionCore
+
+schemes:
+  BBcloud:
+    build:
+      targets:
+        BBcloud: all
+    run:
+      config: Release
+    archive:
+      config: Release

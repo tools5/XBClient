@@ -1,0 +1,110 @@
+name: iOS Build
+
+run-name: iOS Build · ${{ github.head_ref || github.ref_name }} · @${{ github.actor }} · #${{ github.run_number }}
+
+# 打包本切片：Rust 内核交叉编译 → XcodeGen 生成工程 → xcodebuild 关签名归档 →
+# ldid 由内向外伪签名（内嵌 dylib/framework → 扩展 → 主 App）→ 打成可装的 IPA。
+# 本地无法构建 iOS（Windows 无 Xcode），此工作流是唯一验证门禁；首推很可能失败，属预期。
+
+on:
+  push:
+    branches:
+      - '**'
+    paths:
+      - 'apps/ios/**'
+      - 'rust/**'
+      - '.github/workflows/ios-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ipa:
+    name: BBcloud unsigned IPA (aarch64-apple-ios)
+    runs-on: macos-14
+    env:
+      CARGO_TERM_COLOR: always
+    steps:
+      - uses: actions/checkout@v4
+
+      # 1) Rust 静态库（真机 aarch64-apple-ios，绝不用 -sim）
+      - name: Add iOS Rust target
+        run: rustup target add aarch64-apple-ios
+
+      - name: Build aerion-core staticlib
+        run: cargo build --release --target aarch64-apple-ios --manifest-path rust/aerion-core/Cargo.toml
+
+      # 2) 把静态库与 C 头放到 project.yml 引用的确切路径
+      - name: Stage Rust artifacts for Xcode
+        run: |
+          set -euo pipefail
+          LIB=$(find . -path '*aarch64-apple-ios/release/libaerion_core.a' | head -1)
+          test -n "$LIB"
+          mkdir -p apps/ios/Vendor apps/ios/AerionCore
+          cp "$LIB" apps/ios/Vendor/libaerion_core.a
+          cp rust/aerion-core/include/aerion_core.h apps/ios/AerionCore/aerion_core.h
+          ls -lh apps/ios/Vendor/libaerion_core.a
+          lipo -info apps/ios/Vendor/libaerion_core.a || true
+
+      # 3) 生成 Xcode 工程
+      - name: Install XcodeGen and ldid
+        run: brew install xcodegen ldid
+
+      - name: Generate Xcode project
+        run: cd apps/ios && xcodegen generate
+
+      # 4) 关签名归档（app 内已内嵌 PlugIns/PacketTunnel.appex）
+      - name: Archive (unsigned)
+        run: |
+          set -euo pipefail
+          xcodebuild \
+            -project apps/ios/BBcloud.xcodeproj \
+            -scheme BBcloud \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath build/BBcloud.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            IPHONEOS_DEPLOYMENT_TARGET=17.0 \
+            clean archive
+
+      # 5) 组装 Payload/ 并由内向外 ldid 伪签名
+      - name: Assemble and ldid-sign
+        run: |
+          set -euo pipefail
+          APP="build/Payload/BBcloud.app"
+          mkdir -p build/Payload
+          cp -R build/BBcloud.xcarchive/Products/Applications/BBcloud.app build/Payload/
+
+          # 5a) 先签内嵌 dylib/framework（若有）——任何未签的嵌套 Mach-O 都会让 AMFI 拒整包
+          if [ -d "$APP/Frameworks" ]; then
+            find "$APP/Frameworks" -type f -name '*.dylib' -print0 | while IFS= read -r -d '' f; do
+              ldid -S "$f"
+            done
+            find "$APP/Frameworks" -type d -name '*.framework' -print0 | while IFS= read -r -d '' fw; do
+              bin="$fw/$(basename "$fw" .framework)"
+              [ -f "$bin" ] && ldid -S "$bin"
+            done
+          fi
+
+          # 5b) 扩展二进制（带扩展权限）
+          ldid -Sapps/ios/entitlements/appex.entitlements "$APP/PlugIns/PacketTunnel.appex/PacketTunnel"
+
+          # 5c) 主 App 二进制（带主 App 权限）
+          ldid -Sapps/ios/entitlements/app.entitlements "$APP/BBcloud"
+
+      # 6) 打成 IPA
+      - name: Zip IPA
+        run: |
+          set -euo pipefail
+          cd build && zip -qr BBcloud.ipa Payload && ls -la BBcloud.ipa
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BBcloud-ipa
+          path: build/BBcloud.ipa

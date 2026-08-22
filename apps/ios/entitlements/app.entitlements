@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  主 App 权限。无真实 Apple 团队：这些权限由 CI 的 ldid 伪签名嵌入，越狱设备的
+  AMFI 直接采信，无需描述文件。application-groups 必须与扩展完全一致，否则 IPC 失败。
+  get-task-allow 仅用于本调试切片。
+-->
+<plist version="1.0">
+<dict>
+	<key>application-identifier</key>
+	<string>moe.telecom.xbclient</string>
+	<key>com.apple.developer.networking.networkextension</key>
+	<array>
+		<string>packet-tunnel-provider</string>
+	</array>
+	<key>com.apple.developer.networking.vpn.api</key>
+	<array>
+		<string>allow-vpn</string>
+	</array>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>group.moe.telecom.xbclient</string>
+	</array>
+	<key>get-task-allow</key>
+	<true/>
+</dict>
+</plist>

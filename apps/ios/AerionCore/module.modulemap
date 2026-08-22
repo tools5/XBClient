@@ -1,0 +1,6 @@
+// 暴露 Rust 内核的 C-ABI 头给 Swift：PacketTunnel 扩展里 `import AerionCore`。
+// aerion_core.h 由 CI 从 rust/aerion-core/include/aerion_core.h 复制到本目录（勿手动提交拷贝）。
+module AerionCore {
+    header "aerion_core.h"
+    export *
+}
