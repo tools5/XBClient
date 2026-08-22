@@ -1,15 +1,23 @@
 import SwiftUI
 
-// 登录页：面板地址 + 邮箱 + 密码 → XboardAPI.login → 会话落盘（Persistence）。
-// 兼容 Xboard 与自用面板：均为 POST /api/v1/passport/auth/login 返回 auth_data。
+// 登录页：邮箱 + 密码 → XboardAPI.login → 会话落盘（Persistence）。
+// 面板地址默认内置（defaultPanelURL），普通用户无需关心。
+// 长按 Logo 5 次可显示面板地址编辑框，用于域名被墙后手动切换。
 struct LoginView: View {
     @Binding var isLoggedIn: Bool
 
-    @State private var panelURL: String = Persistence.panelURL ?? ""
+    /// 内置默认面板地址。域名变更时发版更新此值即可。
+    private static let defaultPanelURL = "https://dash.bbqaq.com"
+
+    @State private var panelURL: String = Persistence.panelURL ?? LoginView.defaultPanelURL
     @State private var email = ""
     @State private var password = ""
     @State private var isLoading = false
     @State private var errorMessage = ""
+
+    /// 长按 Logo 计数器：达到 5 次后显示面板地址输入框。
+    @State private var logoTapCount = 0
+    @State private var showPanelField = false
 
     @FocusState private var focusedField: Field?
     private enum Field { case panel, email, password }
@@ -17,13 +25,21 @@ struct LoginView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 0) {
-                // 顶部品牌区
+                // 顶部品牌区——长按 5 次解锁面板地址编辑
                 VStack(spacing: 10) {
                     Image(systemName: "bolt.shield.fill")
                         .font(.system(size: 56))
                         .foregroundStyle(
                             LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing)
                         )
+                        .onTapGesture(count: 1) {
+                            logoTapCount += 1
+                            if logoTapCount >= 5 && !showPanelField {
+                                withAnimation(.easeInOut(duration: 0.3)) {
+                                    showPanelField = true
+                                }
+                            }
+                        }
                     Text("BBcloud")
                         .font(.system(size: 40, weight: .bold, design: .rounded))
                     Text("VPN 客户端")
@@ -35,21 +51,25 @@ struct LoginView: View {
 
                 // 表单区
                 VStack(spacing: 14) {
-                    HStack(spacing: 10) {
-                        Image(systemName: "link")
-                            .foregroundStyle(.secondary)
-                            .frame(width: 22)
-                        TextField("https://your-panel.com", text: $panelURL)
-                            .keyboardType(.URL)
-                            .textContentType(.URL)
-                            .textInputAutocapitalization(.never)
-                            .autocorrectionDisabled()
-                            .focused($focusedField, equals: .panel)
-                            .submitLabel(.next)
-                            .onSubmit { focusedField = .email }
+                    // 面板地址：默认隐藏，长按 Logo 5 次后显示
+                    if showPanelField {
+                        HStack(spacing: 10) {
+                            Image(systemName: "link")
+                                .foregroundStyle(.secondary)
+                                .frame(width: 22)
+                            TextField("https://your-panel.com", text: $panelURL)
+                                .keyboardType(.URL)
+                                .textContentType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .autocorrectionDisabled()
+                                .focused($focusedField, equals: .panel)
+                                .submitLabel(.next)
+                                .onSubmit { focusedField = .email }
+                        }
+                        .padding(14)
+                        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                     }
-                    .padding(14)
-                    .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
 
                     HStack(spacing: 10) {
                         Image(systemName: "envelope")
@@ -79,11 +99,6 @@ struct LoginView: View {
                     }
                     .padding(14)
                     .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 14))
-
-                    Text("填写 Xboard / V2board 面板地址，与浏览器访问的地址一致")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
 
                     if !errorMessage.isEmpty {
                         HStack(alignment: .top, spacing: 6) {
@@ -121,8 +136,7 @@ struct LoginView: View {
     }
 
     private var canSubmit: Bool {
-        !panelURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            && !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             && !password.isEmpty
     }
 
@@ -142,7 +156,7 @@ struct LoginView: View {
     private func login() async {
         errorMessage = ""
         guard let base = normalizedPanelURL() else {
-            errorMessage = "请输入有效的面板地址，例如 https://your-panel.com"
+            errorMessage = "面板地址无效"
             return
         }
         let mail = email.trimmingCharacters(in: .whitespacesAndNewlines)
