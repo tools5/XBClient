@@ -130,26 +130,23 @@ pub extern "C" fn aerion_free_string(ptr: *mut c_char) {
     }));
 }
 
-// Swift 对象指针跨 FFI 边界后被闭包长期持有：裸指针默认非 Send/Sync，回调又可能在
-// 任意 tokio 线程触发，故显式声明可跨线程传递，使闭包满足 set_log_callback/
-// set_event_callback 要求的 Fn + Send + Sync + 'static。
-struct CtxPtr(*mut c_void);
-unsafe impl Send for CtxPtr {}
-unsafe impl Sync for CtxPtr {}
-
 type LogCallback = extern "C" fn(ctx: *mut c_void, level: *const c_char, message: *const c_char);
 type EventCallback = extern "C" fn(ctx: *mut c_void, event_json: *const c_char);
 
+// Swift 对象指针跨 FFI 边界后被回调闭包长期持有，且回调可能在任意 tokio 线程触发，
+// 故闭包须满足 set_*_callback 的 Fn + Send + Sync + 'static。裸指针本身非 Send/Sync；
+// 又因 edition 2024 的不相交捕获会只捕获 `ctx.0` 字段而绕过 newtype 上的 unsafe impl，
+// 这里直接把指针 marshal 成 usize（本身 Send + Sync + Copy）带入闭包，回调内再转回指针。
 #[unsafe(no_mangle)]
 pub extern "C" fn aerion_set_log_callback(ctx: *mut c_void, cb: Option<LogCallback>) {
+    let ctx = ctx as usize;
     let _ = catch_unwind(AssertUnwindSafe(|| match cb {
         Some(cb) => {
-            let ctx = CtxPtr(ctx);
             set_log_callback(move |level, message| {
                 let level = to_c_string(&level);
                 let message = to_c_string(&message);
                 // 指针仅在本次调用期间有效，Swift 侧须在回调内立即复制
-                cb(ctx.0, level.as_ptr(), message.as_ptr());
+                cb(ctx as *mut c_void, level.as_ptr(), message.as_ptr());
             });
         }
         // 传入空回调即注销：替换为吞日志的空闭包
@@ -159,13 +156,13 @@ pub extern "C" fn aerion_set_log_callback(ctx: *mut c_void, cb: Option<LogCallba
 
 #[unsafe(no_mangle)]
 pub extern "C" fn aerion_set_event_callback(ctx: *mut c_void, cb: Option<EventCallback>) {
+    let ctx = ctx as usize;
     let _ = catch_unwind(AssertUnwindSafe(|| match cb {
         Some(cb) => {
-            let ctx = CtxPtr(ctx);
             // set_event_callback 闭包签名为 (kind, payload)，事件路径 kind 恒为 "event"，此处仅透传 JSON
             set_event_callback(move |_kind, event_json| {
                 let event_json = to_c_string(&event_json);
-                cb(ctx.0, event_json.as_ptr());
+                cb(ctx as *mut c_void, event_json.as_ptr());
             });
         }
         None => set_event_callback(|_kind, _event_json| {}),
