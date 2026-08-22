@@ -1,54 +1,58 @@
-/* XBClient Material 3 Design — matching Kotlin XbClientLightColors / XbClientDarkColors */
+/* XBClient 方案 D · 极简高对比 — 黑白灰结构 + 唯一状态绿，无阴影/无渐变/无辉光 */
 
 :root {
-  /* Light scheme — matches XbClientLightColors */
-  --primary: #0b57d0;
+  /* Light scheme — 同一结构语言，只翻转明度 */
+  --primary: #171717;
   --on-primary: #ffffff;
-  --primary-container: #d3e3fd;
-  --on-primary-container: #041e49;
-  --secondary: #42526e;
-  --on-secondary: #ffffff;
-  --secondary-container: #d9e2f6;
-  --on-secondary-container: #101c2f;
-  --tertiary: #006b5f;
-  --background: #f6f8fc;
-  --on-background: #161b22;
-  --surface: #f6f8fc;
-  --on-surface: #161b22;
-  --surface-container-low: #ffffff;
+  --primary-container: #f5f5f5;
+  --on-primary-container: #0a0a0a;
+  --background: #fafafa;
+  --on-background: #0a0a0a;
+  --heading: #0a0a0a;
+  --surface: #ffffff;
+  --on-surface: #0a0a0a;
+  --surface-container-low: #fafafa;
   --surface-container: #ffffff;
-  --surface-container-high: #eff3fa;
-  --surface-variant: #e2e8f2;
-  --on-surface-variant: #4c5668;
-  --outline: #9aa7ba;
-  --outline-variant: #d7dee9;
-  --error: #ef4444;
+  --surface-container-high: #f5f5f5;
+  --surface-variant: #f5f5f5;
+  --on-surface-variant: #525252;
+  --text-weak: #a3a3a3;
+  --outline: #d4d4d4;
+  --outline-variant: #e5e5e5;
+  --border-row: #e5e5e5;
+  --accent: #16a34a;
+  --accent-container: #dcfce7;
+  --on-accent-container: #166534;
+  --error: #dc2626;
   --on-error: #ffffff;
+  --font-mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, "Liberation Mono", monospace;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    /* Dark scheme — matches XbClientDarkColors */
-    --primary: #9cc2ff;
-    --on-primary: #073a8c;
-    --primary-container: #123a6f;
-    --on-primary-container: #d8e7ff;
-    --secondary: #bbc6dc;
-    --on-secondary: #273143;
-    --secondary-container: #323d52;
-    --on-secondary-container: #dde6f8;
-    --tertiary: #68dbcd;
-    --background: #0f141b;
-    --on-background: #e5e9f0;
-    --surface: #0f141b;
-    --on-surface: #e5e9f0;
-    --surface-container-low: #171c24;
-    --surface-container: #1b222d;
-    --surface-container-high: #252d39;
-    --surface-variant: #343d4c;
-    --on-surface-variant: #c2cad8;
-    --outline: #7f8a9b;
-    --outline-variant: #303948;
+    /* Dark scheme（默认）— 背景 #0a0a0a、卡面 #0d0d0d、悬停 #171717 */
+    --primary: #ededed;
+    --on-primary: #0a0a0a;
+    --primary-container: #171717;
+    --on-primary-container: #fafafa;
+    --background: #0a0a0a;
+    --on-background: #ededed;
+    --heading: #fafafa;
+    --surface: #0d0d0d;
+    --on-surface: #ededed;
+    --surface-container-low: #0a0a0a;
+    --surface-container: #0d0d0d;
+    --surface-container-high: #171717;
+    --surface-variant: #171717;
+    --on-surface-variant: #8f8f8f;
+    --text-weak: #5c5c5c;
+    --outline: #2e2e2e;
+    --outline-variant: #262626;
+    --border-row: #222222;
+    --accent: #4ade80;
+    --accent-container: #052e16;
+    --on-accent-container: #4ade80;
+    --error: #f87171;
   }
 }
 
@@ -58,26 +62,28 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --primary: #9cc2ff;
-  --on-primary: #073a8c;
-  --primary-container: #123a6f;
-  --on-primary-container: #d8e7ff;
-  --secondary: #bbc6dc;
-  --on-secondary: #273143;
-  --secondary-container: #323d52;
-  --on-secondary-container: #dde6f8;
-  --tertiary: #68dbcd;
-  --background: #0f141b;
-  --on-background: #e5e9f0;
-  --surface: #0f141b;
-  --on-surface: #e5e9f0;
-  --surface-container-low: #171c24;
-  --surface-container: #1b222d;
-  --surface-container-high: #252d39;
-  --surface-variant: #343d4c;
-  --on-surface-variant: #c2cad8;
-  --outline: #7f8a9b;
-  --outline-variant: #303948;
+  --primary: #ededed;
+  --on-primary: #0a0a0a;
+  --primary-container: #171717;
+  --on-primary-container: #fafafa;
+  --background: #0a0a0a;
+  --on-background: #ededed;
+  --heading: #fafafa;
+  --surface: #0d0d0d;
+  --on-surface: #ededed;
+  --surface-container-low: #0a0a0a;
+  --surface-container: #0d0d0d;
+  --surface-container-high: #171717;
+  --surface-variant: #171717;
+  --on-surface-variant: #8f8f8f;
+  --text-weak: #5c5c5c;
+  --outline: #2e2e2e;
+  --outline-variant: #262626;
+  --border-row: #222222;
+  --accent: #4ade80;
+  --accent-container: #052e16;
+  --on-accent-container: #4ade80;
+  --error: #f87171;
 }
 
 /* Reset & base */
@@ -137,8 +143,7 @@ button {
     transform 160ms cubic-bezier(0.22, 1, 0.36, 1),
     background-color 160ms ease-out,
     border-color 160ms ease-out,
-    color 160ms ease-out,
-    box-shadow 160ms ease-out;
+    color 160ms ease-out;
 }
 
 .v-btn:active:not(.v-btn--disabled),
@@ -153,7 +158,7 @@ button {
 .interactive-card:focus-visible,
 .pref-icon-btn:focus-visible,
 .desktop-titlebar__btn:focus-visible {
-  outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  outline: 2px solid color-mix(in srgb, var(--on-background) 45%, transparent);
   outline-offset: 2px;
 }
 
@@ -161,10 +166,15 @@ button {
   cursor: pointer;
 }
 
-/* 订阅里的信息条目（剩余流量/套餐到期等公告伪节点）：弱化展示、不可交互 */
+/* 订阅里的信息条目（剩余流量/套餐到期等公告伪节点）：虚线边框、弱化展示、不可交互 */
 .node-info-card {
-  opacity: 0.62;
+  opacity: 0.5;
   cursor: default;
+}
+
+.panel-card.node-info-card {
+  border-style: dashed !important;
+  background: transparent !important;
 }
 
 /* App shell */
@@ -199,7 +209,7 @@ button {
 .liquid-header h1,
 .auth-brand h1 {
   margin: 0;
-  color: var(--on-background);
+  color: var(--heading);
   font-size: 1.8rem;
   font-weight: 750;
   letter-spacing: -0.03em;
@@ -208,9 +218,9 @@ button {
 
 .eyebrow {
   margin: 0 0 6px;
-  color: var(--primary);
+  color: var(--on-surface-variant);
   font-size: 0.76rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -232,9 +242,10 @@ button {
 }
 
 .notice-link {
-  color: var(--primary);
+  color: var(--on-surface);
   cursor: pointer;
   text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 .stack {
@@ -253,13 +264,6 @@ button {
 .section-row h2,
 .section-row h3 {
   margin: 0;
-}
-
-/* Cards — solid Material 3 surface */
-.liquid-bottom-nav {
-  border: 1px solid var(--outline-variant) !important;
-  background: var(--surface-container) !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
 }
 
 /* Auth */
@@ -297,7 +301,7 @@ button {
   align-items: center;
   gap: 16px;
   padding: 18px 20px;
-  border-radius: 28px !important;
+  border-radius: 10px !important;
 }
 
 .auth-logo-wrap {
@@ -305,10 +309,9 @@ button {
   place-items: center;
   width: 76px;
   height: 76px;
-  border-radius: 22px;
-  background: color-mix(in srgb, var(--primary-container) 72%, transparent);
-  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--outline-variant));
-  box-shadow: 0 10px 28px color-mix(in srgb, var(--primary) 18%, transparent);
+  border-radius: 16px;
+  background: var(--surface);
+  border: 1px solid var(--outline-variant);
 }
 
 .auth-logo {
@@ -323,15 +326,16 @@ button {
 
 .auth-eyebrow {
   margin: 0 0 4px;
-  color: var(--primary);
+  color: var(--on-surface-variant);
   font-size: 0.72rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
 .auth-hero h1 {
   margin: 0;
+  color: var(--heading);
   font-size: 1.55rem;
   font-weight: 800;
   letter-spacing: -0.03em;
@@ -345,7 +349,7 @@ button {
 
 .auth-form-card,
 .auth-oauth-card {
-  border-radius: 24px !important;
+  border-radius: 10px !important;
 }
 
 .auth-oauth-head {
@@ -383,9 +387,9 @@ button {
   width: 40px;
   height: 40px;
   padding: 0;
-  border: 1px solid var(--outline-variant);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--surface-container) 88%, transparent);
+  border: 1px solid var(--outline);
+  border-radius: 8px;
+  background: transparent;
   color: var(--on-surface-variant);
   cursor: pointer;
   transition:
@@ -396,8 +400,8 @@ button {
 }
 
 .pref-icon-btn:hover {
-  border-color: color-mix(in srgb, var(--primary) 35%, var(--outline-variant));
-  color: var(--primary);
+  border-color: var(--outline);
+  color: var(--on-surface);
   background: var(--surface-container-high);
 }
 
@@ -409,8 +413,9 @@ button {
 .pref-menu {
   min-width: 168px;
   border: 1px solid var(--outline-variant);
-  border-radius: 16px !important;
+  border-radius: 10px !important;
   background: var(--surface-container) !important;
+  box-shadow: none !important;
 }
 
 .appearance-row {
@@ -430,13 +435,19 @@ button {
 .text-button {
   border: 0;
   background: transparent;
-  color: var(--primary);
+  color: var(--on-surface-variant);
   font-size: 0.72rem;
-  font-weight: 750;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
   cursor: pointer;
 }
 
-/* Connection card */
+.text-button:hover {
+  color: var(--on-surface);
+}
+
+/* Connection card（重要卡：实底 #0d0d0d / #ffffff） */
 .connection-card {
   display: grid;
   justify-items: center;
@@ -446,12 +457,18 @@ button {
 
 .connection-card h2 {
   margin: 0;
+  color: var(--heading);
   font-size: 2rem;
   font-weight: 760;
   letter-spacing: -0.03em;
 }
 
-/* Metric / info cells — matching Kotlin InfoCell */
+/* 连接状态是唯一彩色：状态绿 */
+.connection-card h2.status-on {
+  color: var(--accent);
+}
+
+/* Metric / info cells — 数字统一等宽 + tabular-nums */
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -461,8 +478,8 @@ button {
 
 .metric-cell {
   border: 1px solid var(--outline-variant);
-  border-radius: 18px;
-  background: var(--surface-container-high);
+  border-radius: 8px;
+  background: transparent;
   padding: 12px 14px;
   display: grid;
   gap: 4px;
@@ -478,8 +495,10 @@ button {
 
 .metric-cell strong {
   font-size: 1rem;
-  font-weight: 700;
-  color: var(--on-background);
+  font-weight: 600;
+  color: var(--heading);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 .plans-grid {
@@ -500,7 +519,31 @@ button {
   max-width: none;
 }
 
-/* Bottom navigation — pill style matching Kotlin */
+/* 已选节点卡：卡面实底 + 明确描边，✓ 标记为状态绿 */
+.node-list .panel-card.v-card--variant-tonal {
+  background: var(--surface) !important;
+  border-color: var(--outline) !important;
+}
+
+.node-list .panel-card.v-card--variant-tonal .font-weight-bold > span {
+  color: var(--accent);
+}
+
+/* 延迟数值：状态绿 + 等宽（“测试中/错误”文案不受影响） */
+.node-list .text-right p.text-caption:not(.text-medium-emphasis):not(.text-error) {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 主页当前节点的延迟片段 */
+.interactive-card .muted > span {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Bottom navigation — 实底描边药丸，无模糊无阴影 */
 .liquid-bottom-nav {
   position: fixed !important;
   inset-inline: 16px !important;
@@ -515,10 +558,9 @@ button {
   border-radius: 42px !important;
   overflow: hidden;
   z-index: 30 !important;
-  background: color-mix(in srgb, var(--surface-container-low) 78%, transparent) !important;
-  -webkit-backdrop-filter: blur(24px) saturate(1.35);
-  backdrop-filter: blur(24px) saturate(1.35);
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--on-background) 14%, transparent) !important;
+  border: 1px solid var(--outline-variant) !important;
+  background: var(--surface-container) !important;
+  box-shadow: none !important;
 }
 
 .liquid-bottom-nav .v-bottom-navigation__content {
@@ -530,6 +572,7 @@ button {
   min-width: 0 !important;
   height: 100% !important;
   border-radius: 31px !important;
+  background: transparent !important;
   color: var(--on-surface-variant) !important;
   position: relative;
   z-index: 1;
@@ -544,8 +587,8 @@ button {
 
 .liquid-bottom-nav .v-btn--active,
 .liquid-bottom-nav .v-btn--selected {
-  color: var(--primary) !important;
-  font-weight: 800;
+  color: var(--heading) !important;
+  font-weight: 700;
 }
 
 /* Nav pill indicator — positioned behind active button */
@@ -554,8 +597,8 @@ button {
   top: 7px;
   height: 62px;
   border-radius: 31px;
-  background: color-mix(in srgb, var(--primary-container) 68%, transparent);
-  border: 1px solid color-mix(in srgb, var(--on-primary-container) 8%, transparent);
+  background: var(--primary-container);
+  border: 1px solid var(--outline);
   transition:
     left 360ms cubic-bezier(0.22, 1, 0.36, 1),
     width 360ms cubic-bezier(0.22, 1, 0.36, 1);
@@ -568,7 +611,7 @@ button {
   line-height: 1;
 }
 
-/* Page header with accent bar — matching Kotlin PageHeader */
+/* Page header with accent bar */
 .page-header {
   display: flex;
   align-items: center;
@@ -580,7 +623,7 @@ button {
   width: 4px;
   height: 30px;
   border-radius: 999px;
-  background: var(--primary);
+  background: var(--heading);
   flex-shrink: 0;
 }
 
@@ -597,7 +640,7 @@ button {
   margin: 0;
   font-size: 1.5rem;
   font-weight: 750;
-  color: var(--on-background);
+  color: var(--heading);
   letter-spacing: -0.02em;
 }
 
@@ -607,33 +650,52 @@ button {
   font-size: 0.88rem;
 }
 
-/* Section label — matching Kotlin Section */
+/* Section label */
 .section-label {
   font-size: 0.76rem;
-  font-weight: 800;
-  color: var(--primary);
+  font-weight: 700;
+  color: var(--on-surface-variant);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   margin-bottom: 10px;
 }
 
-/* Panel — matching Kotlin Panel (OutlinedCard) */
+/* Panel — 普通卡：透明底 + 1px 描边；圆角 10px */
 .panel-card {
   border: 1px solid var(--outline-variant) !important;
-  background: var(--surface-container) !important;
-  border-radius: 18px !important;
+  background: transparent !important;
+  border-radius: 10px !important;
+  box-shadow: none !important;
 }
 
 .panel-card .v-card-text {
   padding: 18px;
 }
 
-/* Plan card — matching Kotlin PlanRow OutlinedCard */
+/* 重要卡（连接面板）：实底卡面 */
+.panel-card.connection-card {
+  background: var(--surface) !important;
+}
+
+/* 可交互卡悬停：悬停面 */
+.panel-card.interactive-card:hover {
+  background: var(--surface-container-high) !important;
+}
+
+/* Plan card */
 .plan-card {
   border: 1px solid var(--outline-variant) !important;
-  background: var(--surface-container) !important;
-  border-radius: 18px !important;
+  background: transparent !important;
+  border-radius: 10px !important;
   overflow: hidden;
+}
+
+/* 套餐价格与金额：等宽数字 */
+.plans-grid .v-chip,
+.plans-grid .v-btn strong,
+.stack .v-chip {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
 }
 
 /* Page section spacing */
@@ -659,8 +721,8 @@ button {
 }
 
 .ticket-message--me {
-  border-color: color-mix(in srgb, var(--primary) 36%, var(--outline-variant));
-  background: color-mix(in srgb, var(--primary-container) 28%, var(--surface-container-high));
+  border-color: var(--outline);
+  background: var(--surface-variant);
 }
 
 .service-grid {
@@ -674,7 +736,7 @@ button {
 }
 
 .service-card:hover {
-  border-color: color-mix(in srgb, var(--primary) 40%, var(--outline-variant)) !important;
+  border-color: var(--outline) !important;
   transform: translateY(-1px);
 }
 
@@ -684,6 +746,7 @@ button {
 
 .service-card h2 {
   margin: 0 0 6px;
+  color: var(--heading);
   font-size: 1.15rem;
   font-weight: 760;
 }
@@ -714,6 +777,107 @@ button {
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* Vuetify 组件统一落入 D 语言 */
+
+/* 按钮：无大写、无阴影；次要按钮 = 透明底 + 1px 描边 */
+.v-btn {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.v-btn--variant-outlined {
+  border-color: var(--outline);
+}
+
+.v-btn--variant-outlined.text-error {
+  border-color: color-mix(in srgb, var(--error) 45%, transparent);
+}
+
+.v-btn--variant-tonal {
+  border: 1px solid var(--outline);
+}
+
+.v-btn--variant-tonal .v-btn__underlay {
+  display: none;
+}
+
+/* 信息/错误提示：描边式，不做大色块 */
+.v-alert--variant-tonal {
+  background: transparent !important;
+  border: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+}
+
+.v-alert--variant-tonal .v-alert__underlay {
+  display: none;
+}
+
+/* Chip：描边小标签，圆角 6px */
+.v-chip {
+  border-radius: 6px !important;
+}
+
+.v-chip--variant-tonal {
+  border: 1px solid var(--outline-variant);
+}
+
+.v-chip--variant-tonal .v-chip__underlay {
+  display: none;
+}
+
+/* 绿 tag（success 色 chip）：状态绿底 */
+.v-chip.text-success {
+  background: var(--accent-container) !important;
+  border-color: color-mix(in srgb, var(--accent) 35%, transparent);
+  color: var(--on-accent-container) !important;
+}
+
+/* 内嵌列表行卡（流量明细/工单消息等） */
+.v-card--variant-outlined {
+  border-color: var(--border-row);
+}
+
+.v-card--variant-tonal {
+  background: var(--surface-variant);
+}
+
+.v-card--variant-tonal .v-card__underlay {
+  display: none;
+}
+
+.v-avatar--variant-tonal {
+  border: 1px solid var(--outline-variant);
+}
+
+.v-avatar--variant-tonal .v-avatar__underlay {
+  display: none;
+}
+
+/* 菜单/下拉：描边浮层，无阴影 */
+.v-menu > .v-overlay__content {
+  border: 1px solid var(--outline-variant);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.v-menu > .v-overlay__content > * {
+  box-shadow: none !important;
+}
+
+/* 分段选择（规则/全局/直连）：描边药丸、选中项反白 */
+.routing-toggle {
+  border: 1px solid var(--outline) !important;
+  background: transparent !important;
+}
+
+.routing-toggle .v-btn {
+  color: var(--on-surface-variant) !important;
+}
+
+.routing-toggle .v-btn--active {
+  background: var(--primary) !important;
+  color: var(--on-primary) !important;
 }
 
 /* Desktop shell (Electron / wide window) */
@@ -871,6 +1035,7 @@ button {
 }
 
 .desktop-brand strong {
+  color: var(--heading);
   font-size: 1rem;
   font-weight: 750;
   letter-spacing: -0.02em;

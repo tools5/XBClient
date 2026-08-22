@@ -73,7 +73,7 @@ async function onProxyToggle(value: boolean | null) {
     <v-card class="panel-card connection-card">
       <v-card-text>
         <div class="d-flex align-center justify-space-between flex-wrap gap-2 mb-3">
-          <h2 class="text-h6 mb-0">
+          <h2 class="text-h6 mb-0" :class="{ 'status-on': connected }">
             {{ connected ? t('status_connected') : t('status_disconnected') }}
           </h2>
           <v-btn-toggle

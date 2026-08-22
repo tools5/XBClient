@@ -209,7 +209,7 @@ function formatUnixTime(value: number): string {
       <p class="section-label">{{ t('section_connection') }}</p>
       <v-card class="panel-card connection-card">
         <v-card-text>
-          <h2>{{ appState.vpn ? t('status_connected') : t('status_disconnected') }}</h2>
+          <h2 :class="{ 'status-on': appState.vpn }">{{ appState.vpn ? t('status_connected') : t('status_disconnected') }}</h2>
           <v-btn
             class="mt-4"
             color="primary"
