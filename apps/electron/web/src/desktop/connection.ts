@@ -25,6 +25,9 @@ import { useAppStore, type AppNode } from '../store'
 // 用响应式 ref 而非普通变量：DesktopConnectionPanel 的 computed 依赖它，
 // 普通变量无法触发重新求值，会把开关永久卡在首次渲染时的禁用状态
 const syncing = ref(false)
+// 会话意外消亡（TUN 运行时崩溃/秒死）的原因：null=无事故；''=消亡但后端未附原因。
+// 自愈只会把 UI 归零，若不把原因留在这里，用户只看到「连了又断」毫无线索。
+const sessionLostDetail = ref<string | null>(null)
 // 串行化队列：applyDesktopConnection 可能被并发触发（bootstrap 自动连接、
 // HomeView 刷新、节点点击、开关切换），并发执行会产生两个 TUN 会话并泄漏其一。
 // 每次排队的执行都会重读最新 state，所以「最后一次操作」自然生效。
@@ -79,8 +82,15 @@ async function disconnectSession(): Promise<void> {
     console.warn('stop VPN session failed; treating session as already stopped', err)
   }
   if (state.systemProxyActive) {
-    await systemProxyClear()
-    state.setSystemProxyActive(false)
+    try {
+      await systemProxyClear()
+      state.setSystemProxyActive(false)
+    } catch (err) {
+      // 清理系统代理失败不能中断后续拆除：否则 setVpn(null)/reportVpnSession(null)
+      // 被跳过，UI 会对着一个已死会话永远显示「已连接」。保留 systemProxyActive
+      // 标记，后续断开/开关操作仍会再次尝试清理。
+      console.warn('clear system proxy during disconnect failed; continuing teardown', err)
+    }
   }
   state.setVpn(null)
   await reportVpnSession(null)
@@ -91,9 +101,9 @@ async function disconnectSession(): Promise<void> {
  * 收到 vpn_session_closed 事件后清空本地连接状态，避免 UI 显示“已连接”但 0 流量。
  */
 export function handleAerionBackendEvent(payload: string): void {
-  let data: { type?: string; wrapper_session_id?: number }
+  let data: { type?: string; wrapper_session_id?: number; error?: string | null }
   try {
-    data = JSON.parse(payload) as { type?: string; wrapper_session_id?: number }
+    data = JSON.parse(payload) as { type?: string; wrapper_session_id?: number; error?: string | null }
   } catch {
     return
   }
@@ -104,6 +114,7 @@ export function handleAerionBackendEvent(payload: string): void {
   // vpn_session_closed 只描述 TUN 会话；SOCKS/route 会话的编号在各自独立计数序列里，
   // 数值可能与 TUN 会话撞号，绝不能据此清掉非 TUN 的活动会话
   if (session.routeMode || session.socksAddr) return
+  sessionLostDetail.value = typeof data.error === 'string' && data.error.trim() ? publicErrorText(data.error) : ''
   state.setVpn(null)
   if (state.systemProxyActive) {
     void systemProxyClear()
@@ -193,6 +204,8 @@ async function startRoute(index: number): Promise<void> {
 }
 
 export function applyDesktopConnection(): Promise<string | null> {
+  // 用户发起了新的连接操作：清掉上一次会话意外消亡的提示
+  sessionLostDetail.value = null
   // 同步置忙：开关/按钮在第一次点击的同一帧就禁用，堵住二次点击窗口
   pendingApplies += 1
   syncing.value = true
@@ -301,4 +314,9 @@ export async function setSystemProxyEnabled(enabled: boolean): Promise<string | 
 
 export function desktopConnectionBusy(): boolean {
   return syncing.value
+}
+
+/** 会话意外消亡的原因；null 表示没有待展示的事故（''=消亡但后端未附原因）。 */
+export function desktopSessionLostDetail(): string | null {
+  return sessionLostDetail.value
 }

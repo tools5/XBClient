@@ -63,6 +63,40 @@ const trayState = {
   userAgent: '',
 }
 
+// ---- 后端日志落盘 --------------------------------------------------------
+// 打包后的应用没有控制台，backend 的 stderr/log/event 若不落盘，用户侧问题
+// 将无从排查。单文件 + 超过 5MB 归档为 backend.log.old（只保留一份）。
+let backendLogStream = null
+
+function backendLogFilePath() {
+  return path.join(app.getPath('userData'), 'logs', 'backend.log')
+}
+
+function initBackendLogFile() {
+  try {
+    const file = backendLogFilePath()
+    fs.mkdirSync(path.dirname(file), { recursive: true })
+    try {
+      const stat = fs.statSync(file)
+      if (stat.size > 5 * 1024 * 1024) fs.renameSync(file, `${file}.old`)
+    } catch {
+      // 文件不存在等：直接追加写
+    }
+    backendLogStream = fs.createWriteStream(file, { flags: 'a' })
+    logBackendLine('main', `---- log started (app ${app.getVersion()}, ${process.platform}) ----`)
+  } catch (err) {
+    console.error('[backend-log] init failed', err instanceof Error ? err.message : String(err))
+  }
+}
+
+function logBackendLine(source, text) {
+  if (!backendLogStream) return
+  const body = String(text).trim()
+  if (!body) return
+  backendLogStream.write(`${new Date().toISOString()} [${source}] ${body}\n`, () => {})
+}
+// ---------------------------------------------------------------------------
+
 function readBuildConfig() {
   if (isPackaged) {
     return JSON.parse(fs.readFileSync(path.join(process.resourcesPath, 'config', 'build-config.json'), 'utf8'))
@@ -277,6 +311,7 @@ function backendStart() {
     backendPending.clear()
     if (!quitRequested) {
       console.error('[backend:exit]', error.message)
+      logBackendLine('exit', error.message)
     }
   })
 
@@ -287,12 +322,17 @@ function backendStart() {
     if (!text) return
     if (!text.startsWith('{')) {
       console.log('[backend:stdout]', text.slice(0, 500))
+      logBackendLine('stdout', text.slice(0, 2000))
       return
     }
 
     try {
       const msg = JSON.parse(text)
       if (msg?.type === 'event') {
+        // 会话生命周期事件（vpn_session_closed 等）是排查断流问题的关键证据
+        if (typeof msg.payload === 'string' && msg.payload.includes('vpn_session_closed')) {
+          logBackendLine('event', msg.payload)
+        }
         // 必须先转发给渲染进程、再改托盘态：handleBackendSessionEvent 会推送 {vpn:null}，
         // 若先推送，渲染端在收到 aerion-event 前就被清掉 vpn，自愈分支（清系统代理）早退失效
         if (mainWindow) mainWindow.webContents.send('aerion-event', msg.payload)
@@ -301,6 +341,7 @@ function backendStart() {
       }
       if (msg?.type === 'log') {
         console.log('[backend]', msg.level, msg.message)
+        logBackendLine(String(msg.level || 'log'), String(msg.message ?? ''))
         return
       }
       if (typeof msg?.id === 'number') {
@@ -324,6 +365,7 @@ function backendStart() {
     const chunk = String(data)
     backendStderr = (backendStderr + chunk).slice(-8000)
     console.error('[backend:stderr]', chunk.trim())
+    logBackendLine('stderr', chunk)
   })
 }
 
@@ -1103,6 +1145,7 @@ function startHttpHandlers() {
 function notifyBackendError(err) {
   const message = err instanceof Error ? err.message : String(err)
   console.error('[backend]', message)
+  logBackendLine('fatal', message)
   dialog.showErrorBox('启动失败', message)
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('backend-error', message)
@@ -1123,6 +1166,8 @@ if (instanceLock) {
     const env = validateBackendEnv()
     const appName = env.XBCLIENT_APP_NAME
     app.setName(appName)
+    // 必须在 setName 之后：userData 路径随应用名变化，日志要落在正确目录
+    initBackendLogFile()
     if (!ELECTRON_SUPPORTED_PLATFORMS.has(process.platform)) {
       await dialog.showMessageBox({
         type: 'warning',
@@ -1143,7 +1188,7 @@ if (instanceLock) {
     startHttpHandlers()
     createMainWindow()
     setupTray(appName)
-    setupAutoUpdater()
+    setupAutoUpdater(env.XBCLIENT_DEFAULT_API_URL)
     void startBackendInBackground()
 
     app.on('activate', () => {

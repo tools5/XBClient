@@ -7,11 +7,22 @@ use std::collections::HashMap;
 use std::io::Write;
 use std::net::IpAddr;
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 use tokio::io::{self, AsyncBufReadExt, BufReader};
 
+#[cfg(windows)]
+mod http_bridge;
 mod subscription;
 mod system_proxy;
+
+// 当前活动的本地 HTTP 代理桥（Windows 系统代理必须经它转发，见 http_bridge.rs 顶部注释）
+#[cfg(windows)]
+static HTTP_BRIDGE: Lazy<tokio::sync::Mutex<Option<http_bridge::HttpBridge>>> =
+    Lazy::new(|| tokio::sync::Mutex::new(None));
+
+// 系统代理是否由本进程写入：stdin EOF 的兜底清理只在真的改过系统设置时才执行
+static PROXY_SET_BY_US: AtomicBool = AtomicBool::new(false);
 
 static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
     reqwest::Client::builder()
@@ -23,11 +34,20 @@ static HTTP_CLIENT: Lazy<reqwest::Client> = Lazy::new(|| {
 
 static OUTPUT_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
+// Electron 消亡后 stderr 管道也可能已关闭，eprintln! 写失败会 panic；
+// 收尾/降级路径的日志一律走这里，写不进去就静默放弃，绝不 panic
+fn log_stderr_best_effort(text: &str) {
+    let _ = writeln!(std::io::stderr(), "{text}");
+}
+
 fn emit_line(value: &Value) {
     let guard = OUTPUT_LOCK.lock().expect("lock stdout writer");
     let mut out = std::io::stdout().lock();
-    writeln!(out, "{}", value).expect("write RPC line to stdout");
-    out.flush().expect("flush RPC stdout");
+    // stdout 断开（Electron 已死）时绝不 panic：panic 会跳过 main 尾部的
+    // shutdown_cleanup，把系统代理留在指向已死端口的状态
+    if writeln!(out, "{}", value).and_then(|_| out.flush()).is_err() {
+        log_stderr_best_effort("[backend] write RPC line to stdout failed (peer closed?)");
+    }
     drop(guard);
 }
 
@@ -384,13 +404,91 @@ async fn system_proxy_set(params: &Value) -> Result<()> {
     }
     let input: SystemProxySetParams =
         serde_json::from_value(params.clone()).context("parse system_proxy_set args")?;
-    system_proxy::set_socks(&input.host, input.port).context("system proxy set")?;
+    #[cfg(windows)]
+    {
+        // Windows 不能把 SOCKS5 监听直接写进注册表（WinINET/Chromium 只按 SOCKS4 握手），
+        // 必须先起本地 HTTP 代理桥，再把桥地址以 HTTP 代理形式写入系统代理
+        let upstream: std::net::SocketAddr = format!("{}:{}", input.host, input.port)
+            .parse()
+            .context("parse SOCKS upstream address")?;
+        // 先起新桥并把注册表切到新桥，成功后才停旧桥；写注册表失败则撤掉新桥、
+        // 旧桥原样保留——注册表要么指向新桥要么仍指向可用的旧桥，绝不指向死端口
+        let bridge = http_bridge::start(upstream).await?;
+        let bridge_addr = bridge.addr;
+        let mut guard = HTTP_BRIDGE.lock().await;
+        match system_proxy::set_http(&bridge_addr.ip().to_string(), bridge_addr.port()) {
+            Ok(()) => {
+                if let Some(previous) = guard.replace(bridge) {
+                    previous.stop();
+                }
+                PROXY_SET_BY_US.store(true, Ordering::SeqCst);
+            }
+            Err(error) => {
+                bridge.stop();
+                return Err(error.context("system proxy set"));
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        system_proxy::set_socks(&input.host, input.port).context("system proxy set")?;
+        PROXY_SET_BY_US.store(true, Ordering::SeqCst);
+    }
     Ok(())
 }
 
 async fn system_proxy_clear() -> Result<()> {
-    system_proxy::clear().context("system proxy clear")?;
+    #[cfg(windows)]
+    {
+        // 先恢复注册表再停桥：恢复失败时保留桥继续服务（浏览器不至于断网），
+        // 绝不留下 ProxyEnable=1 指向已死端口的状态
+        system_proxy::restore().context("system proxy restore")?;
+        PROXY_SET_BY_US.store(false, Ordering::SeqCst);
+        let previous = HTTP_BRIDGE.lock().await.take();
+        if let Some(previous) = previous {
+            previous.stop();
+        }
+    }
+    #[cfg(not(windows))]
+    {
+        system_proxy::clear().context("system proxy clear")?;
+        PROXY_SET_BY_US.store(false, Ordering::SeqCst);
+    }
     Ok(())
+}
+
+/// 进程收尾兜底：stdin EOF/读错误（Electron 崩溃或退出）后执行。
+/// 若系统代理是本进程写入的，必须恢复用户原有设置——否则注册表里
+/// ProxyEnable=1 指向一个已死的临时端口，整机浏览器直接断网。
+/// 此路径只尽力而为：任何失败仅写 stderr，绝不 panic。
+async fn shutdown_cleanup() {
+    if PROXY_SET_BY_US.swap(false, Ordering::SeqCst) {
+        // 与 system_proxy_clear 保持同序：先恢复注册表，再停桥
+        #[cfg(windows)]
+        {
+            if let Err(error) = system_proxy::restore() {
+                log_stderr_best_effort(&format!(
+                    "[backend] restore system proxy on shutdown failed: {error:#}"
+                ));
+            }
+        }
+        #[cfg(not(windows))]
+        {
+            if let Err(error) = system_proxy::clear() {
+                log_stderr_best_effort(&format!(
+                    "[backend] clear system proxy on shutdown failed: {error:#}"
+                ));
+            }
+        }
+    }
+    #[cfg(windows)]
+    {
+        // 进程即将退出，桥必然随之消亡；显式停掉让监听端口立即释放
+        let bridge = HTTP_BRIDGE.lock().await.take();
+        if let Some(bridge) = bridge {
+            bridge.stop();
+        }
+    }
 }
 
 fn emit_rpc_response(id: u64, out: Result<RpcResponseOk, anyhow::Error>) {
@@ -593,6 +691,10 @@ async fn main() -> Result<()> {
 
         emit_rpc_response(req.id, out);
     }
+
+    // stdin EOF/读错误意味着 Electron 已经退出或崩溃：兜底恢复系统代理并停桥，
+    // 避免孤儿退出后把整机浏览器留在「代理指向已死端口」的断网状态
+    shutdown_cleanup().await;
 
     Ok(())
 }

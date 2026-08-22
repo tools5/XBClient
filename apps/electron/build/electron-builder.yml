@@ -22,6 +22,10 @@ extraResources:
     to: bin
     filter:
       - xbclient-electron-backend*
+      # Windows TUN 依赖 wintun.dll（tun2proxy build.rs 会复制到 target/release）。
+      # 它必须与 backend 可执行文件同目录，否则打包版 TUN 创建虚拟网卡时
+      # LoadLibrary 找不到 DLL，会话启动即静默死亡（表现为连接后立即断开/无流量）。
+      - wintun.dll
   - from: ../../rust/aerion-core/assets/route
     to: route
   - from: resources/config

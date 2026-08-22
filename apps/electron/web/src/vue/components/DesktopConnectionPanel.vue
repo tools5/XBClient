@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import {
   desktopConnectionBusy,
+  desktopSessionLostDetail,
   setRoutingMode,
   setSystemProxyEnabled,
   setTunEnabled,
@@ -22,6 +23,13 @@ const routingModes = [
 
 const connected = computed(() => Boolean(appState.vpn))
 const busy = computed(() => desktopConnectionBusy())
+// 会话意外消亡（如 TUN 运行时启动即失败）时展示原因，否则用户只看到「连了又断」
+const sessionLostMessage = computed(() => {
+  const detail = desktopSessionLostDetail()
+  if (detail === null) return ''
+  return detail ? `${t('vpn_session_lost')}: ${detail}` : t('vpn_session_lost')
+})
+const displayError = computed(() => error.value || sessionLostMessage.value)
 const tunNeedsElevation = computed(
   () => appState.settings.tunEnabled && appState.capabilities?.vpn && appState.capabilities.tun_elevated === false,
 )
@@ -104,8 +112,8 @@ async function onProxyToggle(value: boolean | null) {
           </v-btn-toggle>
         </div>
 
-        <v-alert v-if="error" color="error" variant="tonal" density="compact" class="mb-3">
-          {{ error }}
+        <v-alert v-if="displayError" color="error" variant="tonal" density="compact" class="mb-3">
+          {{ displayError }}
         </v-alert>
 
         <v-alert

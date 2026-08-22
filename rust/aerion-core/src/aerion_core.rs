@@ -657,9 +657,15 @@ mod platform {
         });
 
         tokio::spawn(async move {
-            if let Err(error) = runtime.wait().await {
-                log::error!("Aerion TUN runtime exited with error: {error:?}");
-            }
+            // 保留退出原因：TUN 运行时秒死（wintun 加载失败/路由 setup 失败等）时，
+            // 自愈事件必须把原因带给前端展示，否则用户只看到「连了又断」毫无线索
+            let runtime_error = match runtime.wait().await {
+                Ok(_) => None,
+                Err(error) => {
+                    log::error!("Aerion TUN runtime exited with error: {error:?}");
+                    Some(format!("{error:#}"))
+                }
+            };
             // 先绑定到局部变量：`let` 语句结束即释放注册表锁。
             // 绝不能写成 `if let Some(x) = MAP.lock()...remove(..)`——
             // 作用域规则会让 MutexGuard 存活到整个 if let 块结束，
@@ -679,7 +685,7 @@ mod platform {
                 }
                 // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态（此时已不持有任何锁）
                 on_event(
-                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id, "mode": "tun"})
+                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id, "mode": "tun", "error": runtime_error})
                         .to_string(),
                 );
             }
@@ -855,9 +861,15 @@ mod platform {
             );
 
         tokio::spawn(async move {
-            if let Err(error) = runtime.wait().await {
-                log::error!("Aerion TUN runtime exited with error: {error:?}");
-            }
+            // 保留退出原因：TUN 运行时秒死（wintun 加载失败/路由 setup 失败等）时，
+            // 自愈事件必须把原因带给前端展示，否则用户只看到「连了又断」毫无线索
+            let runtime_error = match runtime.wait().await {
+                Ok(_) => None,
+                Err(error) => {
+                    log::error!("Aerion TUN runtime exited with error: {error:?}");
+                    Some(format!("{error:#}"))
+                }
+            };
             // 先绑定到局部变量：`let` 语句结束即释放注册表锁。
             // 绝不能写成 `if let Some(x) = MAP.lock()...remove(..)`——
             // 作用域规则会让 MutexGuard 存活到整个 if let 块结束，
@@ -879,7 +891,7 @@ mod platform {
                 }
                 // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态（此时已不持有任何锁）
                 on_event(
-                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id, "mode": "tun"})
+                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id, "mode": "tun", "error": runtime_error})
                         .to_string(),
                 );
             }
