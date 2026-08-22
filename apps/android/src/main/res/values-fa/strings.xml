@@ -50,6 +50,10 @@
     <string name="section_about">درباره برنامه</string>
     <string name="section_appearance">ظاهر</string>
 
+    <string name="routing_mode_rule">قوانین</string>
+    <string name="routing_mode_global">سراسری</string>
+    <string name="routing_mode_direct">مستقیم</string>
+
     <string name="status_connected">متصل</string>
     <string name="status_disconnected">قطع</string>
     <string name="status_connecting">در حال اتصال</string>

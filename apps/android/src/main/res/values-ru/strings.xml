@@ -50,6 +50,10 @@
     <string name="section_about">О приложении</string>
     <string name="section_appearance">Внешний вид</string>
 
+    <string name="routing_mode_rule">Правила</string>
+    <string name="routing_mode_global">Глобально</string>
+    <string name="routing_mode_direct">Напрямую</string>
+
     <string name="status_connected">Подключено</string>
     <string name="status_disconnected">Не подключено</string>
     <string name="status_connecting">Подключение</string>

@@ -17,6 +17,11 @@ const val DEFAULT_NODE_TEST_TARGET = "https://cp.cloudflare.com"
 const val DNS_MODE_OVER_TCP = "over_tcp"
 const val DNS_MODE_VIRTUAL = "virtual"
 const val DNS_MODE_DIRECT = "direct"
+// 路由模式（与 electron 端 routingMode 语义一致）：
+// rule = 按订阅/自定义 Clash 规则分流；global = 全部流量走当前节点；direct = 全部直连
+const val ROUTING_MODE_RULE = "rule"
+const val ROUTING_MODE_GLOBAL = "global"
+const val ROUTING_MODE_DIRECT = "direct"
 const val REWARD_SCENE_PLAN = "plan"
 const val REWARD_SCENE_POINTS = "points"
 const val SUBSCRIPTION_BLOCK_NO_PLAN = "no_plan"

@@ -130,7 +130,9 @@ function applyTrayPush(patch: TrayStatePushFromMain): void {
         routeMode: patch.vpn.routeMode,
         routingMode: patch.vpn.routingMode,
       })
-      void reportVpnSession(patch.vpn.sessionId)
+      // activeVpnSessionId 只能存 TUN 会话编号（SOCKS/route 会话在各自计数序列里会撞号）
+      const isTun = !patch.vpn.routeMode && !patch.vpn.socksAddr
+      void reportVpnSession(isTun ? patch.vpn.sessionId : null)
     } else {
       store.setVpn(null)
       void reportVpnSession(null)

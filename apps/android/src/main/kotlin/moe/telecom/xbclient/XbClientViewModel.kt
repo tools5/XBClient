@@ -94,6 +94,8 @@ data class XbClientUiState(
     val vpnIpv6Enabled: Boolean = true,
     val routeConfigYaml: String = "",
     val customRouteConfigYaml: String = "",
+    /** 路由模式：rule 规则分流 / global 全局代理 / direct 全部直连 */
+    val routingMode: String = ROUTING_MODE_RULE,
     val geoipDir: String = "",
     val routeRuleCount: Int = 0,
     val routeRulesPreview: List<String> = emptyList(),
@@ -1687,6 +1689,11 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             if (state.appRuleMode == MODE_ALLOW && state.allowedApps.isEmpty()) {
                 throw IllegalStateException("白名单模式尚未选择应用。")
             }
+            // 直连模式不经过任何节点，跳过节点校验
+            if (state.routingMode == ROUTING_MODE_DIRECT) {
+                emitEvent(XbClientEvent.RequestVpnPermission(state.selectedNodeIndex.coerceAtLeast(0)))
+                return
+            }
             if (state.anyTlsNodes.isEmpty()) {
                 throw IllegalStateException("节点尚未同步完成。")
             }
@@ -1706,6 +1713,21 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** 切换路由模式（规则/全局/直连）；已连接时立即按新模式重连，与桌面端行为一致。 */
+    fun setRoutingMode(mode: String) {
+        if (mode != ROUTING_MODE_RULE && mode != ROUTING_MODE_GLOBAL && mode != ROUTING_MODE_DIRECT) {
+            return
+        }
+        if (_uiState.value.routingMode == mode) {
+            return
+        }
+        val reconnect = _uiState.value.vpnRequested
+        updateAndPersist { it.copy(routingMode = mode) }
+        if (reconnect) {
+            beginVpn(app, _uiState.value.selectedNodeIndex)
+        }
+    }
+
     fun beginVpn(context: Context, nodeIndex: Int) {
         val state = _uiState.value
         val selectedIndex = nodeIndex.coerceIn(0, (state.anyTlsNodes.size - 1).coerceAtLeast(0))
@@ -1713,9 +1735,22 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             vpnBaseRxBytes = currentUidRxBytes()
             vpnBaseTxBytes = currentUidTxBytes()
         }
+        // 路由模式决定实际下发的节点与分流配置：
+        // rule = 当前节点 + Clash 规则；global = 当前节点、不带规则（全部走代理）；
+        // direct = 直连伪节点、不带规则（全部直连，不经过任何服务器）
+        val nodeJson = if (state.routingMode == ROUTING_MODE_DIRECT) {
+            """{"type":"direct","name":"DIRECT"}"""
+        } else {
+            state.anyTlsNodes[selectedIndex].rawJson
+        }
+        val routeConfigYaml = if (state.routingMode == ROUTING_MODE_RULE) {
+            state.customRouteConfigYaml.ifBlank { state.routeConfigYaml }
+        } else {
+            ""
+        }
         val intent = Intent(context, XbClientVpnService::class.java).apply {
             action = XbClientVpnService.ACTION_START
-            putExtra(XbClientVpnService.EXTRA_NODE, state.anyTlsNodes[selectedIndex].rawJson)
+            putExtra(XbClientVpnService.EXTRA_NODE, nodeJson)
             putExtra(XbClientVpnService.EXTRA_NODES, nodesJson(state.anyTlsNodes))
             putExtra(XbClientVpnService.EXTRA_NODE_INDEX, selectedIndex)
             putExtra(XbClientVpnService.EXTRA_EXCLUDED_APPS, state.excludedApps)
@@ -1726,7 +1761,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             putExtra(XbClientVpnService.EXTRA_DNS_MODE, state.vpnDnsMode)
             putExtra(XbClientVpnService.EXTRA_VIRTUAL_DNS_POOL, state.virtualDnsPool)
             putExtra(XbClientVpnService.EXTRA_IPV6_ENABLED, state.vpnIpv6Enabled)
-            putExtra(XbClientVpnService.EXTRA_ROUTE_CONFIG_YAML, state.customRouteConfigYaml.ifBlank { state.routeConfigYaml })
+            putExtra(XbClientVpnService.EXTRA_ROUTE_CONFIG_YAML, routeConfigYaml)
             putExtra(XbClientVpnService.EXTRA_GEOIP_DIR, state.geoipDir)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
@@ -1941,6 +1976,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             vpnIpv6Enabled = prefs[Keys.VPN_IPV6_ENABLED] ?: true,
             routeConfigYaml = prefs[Keys.ROUTE_CONFIG_YAML].orEmpty(),
             customRouteConfigYaml = prefs[Keys.CUSTOM_ROUTE_CONFIG_YAML].orEmpty(),
+            routingMode = prefs[Keys.ROUTING_MODE] ?: ROUTING_MODE_RULE,
             geoipDir = storedGeoipDir?.takeIf { it.isNotBlank() } ?: bundledRouteAssetsDir,
             routeRuleCount = prefs[Keys.ROUTE_RULE_COUNT] ?: 0,
             routeRulesPreview = prefs[Keys.ROUTE_RULES_PREVIEW].orEmpty().lines().filter { it.isNotBlank() },
@@ -2054,6 +2090,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             prefs[Keys.VPN_IPV6_ENABLED] = state.vpnIpv6Enabled
             prefs[Keys.ROUTE_CONFIG_YAML] = state.routeConfigYaml
             prefs[Keys.CUSTOM_ROUTE_CONFIG_YAML] = state.customRouteConfigYaml
+            prefs[Keys.ROUTING_MODE] = state.routingMode
             prefs[Keys.GEOIP_DIR] = state.geoipDir
             prefs[Keys.ROUTE_RULE_COUNT] = state.routeRuleCount
             prefs[Keys.ROUTE_RULES_PREVIEW] = state.routeRulesPreview.joinToString("\n")
@@ -2341,6 +2378,7 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         val VPN_IPV6_ENABLED = booleanPreferencesKey("vpn_ipv6_enabled")
         val ROUTE_CONFIG_YAML = stringPreferencesKey("route_config_yaml")
         val CUSTOM_ROUTE_CONFIG_YAML = stringPreferencesKey("custom_route_config_yaml")
+        val ROUTING_MODE = stringPreferencesKey("routing_mode")
         val GEOIP_DIR = stringPreferencesKey("geoip_dir")
         val ROUTE_RULE_COUNT = intPreferencesKey("route_rule_count")
         val ROUTE_RULES_PREVIEW = stringPreferencesKey("route_rules_preview")

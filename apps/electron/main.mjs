@@ -620,7 +620,10 @@ function handleBackendSessionEvent(payload) {
   const sessionId = data.wrapper_session_id
   if (typeof sessionId !== 'number') return
   if (activeVpnSessionId === sessionId) activeVpnSessionId = null
-  if (trayState.vpn && trayState.vpn.sessionId === sessionId) {
+  // vpn_session_closed 只描述 TUN 会话；SOCKS/route 会话的编号在各自独立计数序列里，
+  // 数值可能与 TUN 会话撞号，绝不能据此清掉非 TUN 的活动会话
+  const currentIsTun = trayState.vpn && !trayState.vpn.routeMode && !trayState.vpn.socksAddr
+  if (currentIsTun && trayState.vpn.sessionId === sessionId) {
     trayState.vpn = null
     rebuildTrayMenu()
     pushTrayStateToWeb({ vpn: null })

@@ -4,6 +4,9 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -16,6 +19,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -24,6 +28,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -131,7 +136,7 @@ internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
         }
         return
     }
-    ConnectionStatusCard(state, now) {
+    ConnectionStatusCard(state, now, onRoutingMode = viewModel::setRoutingMode) {
         if (state.vpnRequested) viewModel.stopVpn(context) else viewModel.requestStartVpn()
     }
     Spacer(Modifier.height(12.dp))
@@ -196,7 +201,12 @@ internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
 }
 
 @Composable
-private fun ConnectionStatusCard(state: XbClientUiState, now: Long, onToggle: () -> Unit) {
+private fun ConnectionStatusCard(
+    state: XbClientUiState,
+    now: Long,
+    onRoutingMode: (String) -> Unit,
+    onToggle: () -> Unit
+) {
     val connected = state.vpnRequested && !state.vpnStarting
     val statusText = stringResource(
         id = when {
@@ -240,7 +250,13 @@ private fun ConnectionStatusCard(state: XbClientUiState, now: Long, onToggle: ()
             Spacer(Modifier.height(6.dp))
             Text(stringResource(R.string.connection_idle_hint), color = MiuixTheme.colorScheme.onSurfaceVariantSummary)
         }
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(14.dp))
+        RoutingModeSelector(
+            selected = state.routingMode,
+            enabled = !state.vpnStarting,
+            onSelect = onRoutingMode
+        )
+        Spacer(Modifier.height(14.dp))
         Button(
             onClick = onToggle,
             enabled = !state.vpnStarting,
@@ -253,6 +269,45 @@ private fun ConnectionStatusCard(state: XbClientUiState, now: Long, onToggle: ()
             AnimatedContent(targetState = actionText, transitionSpec = { contentTransition() }, label = "connection-action") { text ->
                 Text(text)
             }
+        }
+    }
+}
+
+/**
+ * 路由模式分段选择（规则/全局/直连）。
+ * D 语言：描边药丸容器 + 选中项反白（暗色反白 / 亮色反黑），与 electron 端 .routing-toggle 同语义。
+ */
+@Composable
+private fun RoutingModeSelector(selected: String, enabled: Boolean, onSelect: (String) -> Unit) {
+    val t = xbTokens()
+    val pill = RoundedCornerShape(50)
+    val modes = listOf(
+        ROUTING_MODE_RULE to stringResource(R.string.routing_mode_rule),
+        ROUTING_MODE_GLOBAL to stringResource(R.string.routing_mode_global),
+        ROUTING_MODE_DIRECT to stringResource(R.string.routing_mode_direct)
+    )
+    Row(
+        modifier = Modifier
+            .border(1.dp, t.controlBorder, pill)
+            .padding(3.dp),
+        horizontalArrangement = Arrangement.spacedBy(2.dp)
+    ) {
+        modes.forEach { (value, label) ->
+            val active = value == selected
+            Text(
+                label,
+                style = MiuixTheme.textStyles.body2,
+                color = when {
+                    active -> t.buttonPrimaryText
+                    enabled -> t.textMuted
+                    else -> t.textFaint
+                },
+                modifier = Modifier
+                    .clip(pill)
+                    .background(if (active) t.buttonPrimaryBg else Color.Transparent)
+                    .clickable(enabled = enabled && !active) { onSelect(value) }
+                    .padding(horizontal = 14.dp, vertical = 6.dp)
+            )
         }
     }
 }

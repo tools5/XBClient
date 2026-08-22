@@ -19,10 +19,13 @@ import {
 import { publicErrorText } from '../format'
 import { reportVpnSession } from '../platform/electron'
 import { isDesktopShell } from '../platform/shell'
+import { ref } from 'vue'
 import { useAppStore, type AppNode } from '../store'
 
 let syncToken = 0
-let syncing = false
+// 用响应式 ref 而非普通变量：DesktopConnectionPanel 的 computed 依赖它，
+// 普通变量无法触发重新求值，会把开关永久卡在首次渲染时的禁用状态
+const syncing = ref(false)
 
 export function isDesktopConnectionShell(): boolean {
   return isDesktopShell() && Boolean(useAppStore.getState().capabilities?.vpn)
@@ -94,6 +97,9 @@ export function handleAerionBackendEvent(payload: string): void {
   const state = useAppStore.getState()
   const session = state.vpn
   if (!session || typeof data.wrapper_session_id !== 'number' || session.sessionId !== data.wrapper_session_id) return
+  // vpn_session_closed 只描述 TUN 会话；SOCKS/route 会话的编号在各自独立计数序列里，
+  // 数值可能与 TUN 会话撞号，绝不能据此清掉非 TUN 的活动会话
+  if (session.routeMode || session.socksAddr) return
   state.setVpn(null)
   if (state.systemProxyActive) {
     void systemProxyClear()
@@ -192,7 +198,7 @@ export async function applyDesktopConnection(): Promise<string | null> {
   if (state.settings.routingMode !== 'direct' && (!node?.connectSupported || node.isInfo)) return null
 
   const token = ++syncToken
-  syncing = true
+  syncing.value = true
   try {
     const routeConfigYaml = state.settings.routeConfigYaml.trim() || state.routing.routeConfigYaml || ''
     const useRuleRouting =
@@ -254,7 +260,7 @@ export async function applyDesktopConnection(): Promise<string | null> {
   } catch (err) {
     return publicErrorText(err)
   } finally {
-    if (token === syncToken) syncing = false
+    if (token === syncToken) syncing.value = false
   }
 }
 
@@ -277,5 +283,5 @@ export async function setSystemProxyEnabled(enabled: boolean): Promise<string | 
 }
 
 export function desktopConnectionBusy(): boolean {
-  return syncing
+  return syncing.value
 }

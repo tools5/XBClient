@@ -551,6 +551,9 @@ mod platform {
         shutdown: TunCancellationToken,
         proxy_task: JoinHandle<Result<()>>,
         _core: Option<aerion::ProxyCore>,
+        // TUN 运行时完全退出后由清理任务发出信号；stop 以此等待旧运行时真正结束，
+        // 避免「停止立刻返回、旧运行时异步残留」与下一次启动竞态
+        runtime_done: Option<tokio::sync::oneshot::Receiver<()>>,
     }
 
     pub async fn start(input: &str) -> Result<String> {
@@ -605,6 +608,7 @@ mod platform {
         let runtime = spawn_tun(tun_config).context("spawn Aerion TUN runtime")?;
         let shutdown = runtime.shutdown_token();
         let session_id = NEXT_VPN_SESSION_ID.fetch_add(1, Ordering::SeqCst);
+        let (runtime_done_tx, runtime_done_rx) = tokio::sync::oneshot::channel::<()>();
         VPN_SESSIONS
             .lock()
             .expect("VPN session map lock poisoned")
@@ -614,6 +618,7 @@ mod platform {
                     shutdown: shutdown.clone(),
                     proxy_task,
                     _core: core.clone(),
+                    runtime_done: Some(runtime_done_rx),
                 },
             );
 
@@ -639,11 +644,15 @@ mod platform {
             if let Err(error) = runtime.wait().await {
                 log::error!("Aerion TUN runtime exited with error: {error:?}");
             }
-            if let Some(session) = VPN_SESSIONS
+            // 先绑定到局部变量：`let` 语句结束即释放注册表锁。
+            // 绝不能写成 `if let Some(x) = MAP.lock()...remove(..)`——
+            // 作用域规则会让 MutexGuard 存活到整个 if let 块结束，
+            // 导致持锁执行 abort/JNI/stdout 回调，任何回调阻塞都会卡死所有 start/stop RPC。
+            let removed = VPN_SESSIONS
                 .lock()
                 .expect("VPN session map lock poisoned")
-                .remove(&session_id)
-            {
+                .remove(&session_id);
+            if let Some(session) = removed {
                 if let Some(core) = session._core {
                     core.cancel_all_sessions();
                 }
@@ -652,12 +661,13 @@ mod platform {
                 if let Some(task) = event_task_inner {
                     task.abort();
                 }
-                // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态
+                // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态（此时已不持有任何锁）
                 on_event(
-                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id})
+                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id, "mode": "tun"})
                         .to_string(),
                 );
             }
+            let _ = runtime_done_tx.send(());
         });
 
         Ok(json!({
@@ -695,6 +705,13 @@ mod platform {
             core.cancel_all_sessions();
         }
         session.proxy_task.abort();
+        // 等待 TUN 运行时真正退出后再返回，保证「停止→立刻重启」时旧运行时
+        // 不会与新会话并存（此处未持有任何锁，await 安全）
+        if let Some(done) = session.runtime_done {
+            if timeout(Duration::from_secs(10), done).await.is_err() {
+                log::warn!("VPN session {session_id} runtime did not exit within 10s after stop");
+            }
+        }
         Ok(json!({"ok": true, "session_id": session_id}).to_string())
     }
 }
@@ -717,6 +734,9 @@ mod platform {
         _log_task: Option<JoinHandle<()>>,
         _event_task: Option<JoinHandle<()>>,
         _core: Option<aerion::ProxyCore>,
+        // TUN 运行时完全退出（Windows/Linux 上含 tproxy 路由/DNS 还原）后由清理任务发出信号；
+        // stop 以此等待还原完成，避免旧会话的异步还原晚于下一个会话的 setup 执行而拔掉新路由
+        runtime_done: Option<tokio::sync::oneshot::Receiver<()>>,
     }
 
     pub async fn start(input: &str) -> Result<String> {
@@ -783,6 +803,7 @@ mod platform {
             })
         });
 
+        let (runtime_done_tx, runtime_done_rx) = tokio::sync::oneshot::channel::<()>();
         VPN_SESSIONS
             .lock()
             .expect("VPN session map lock poisoned")
@@ -794,6 +815,7 @@ mod platform {
                     _log_task: log_task,
                     _event_task: event_task,
                     _core: core.clone(),
+                    runtime_done: Some(runtime_done_rx),
                 },
             );
 
@@ -801,11 +823,15 @@ mod platform {
             if let Err(error) = runtime.wait().await {
                 log::error!("Aerion TUN runtime exited with error: {error:?}");
             }
-            if let Some(session) = VPN_SESSIONS
+            // 先绑定到局部变量：`let` 语句结束即释放注册表锁。
+            // 绝不能写成 `if let Some(x) = MAP.lock()...remove(..)`——
+            // 作用域规则会让 MutexGuard 存活到整个 if let 块结束，
+            // 导致持锁执行 abort/stdout 回调，任何回调阻塞都会卡死所有 start/stop RPC。
+            let removed = VPN_SESSIONS
                 .lock()
                 .expect("VPN session map lock poisoned")
-                .remove(&session_id)
-            {
+                .remove(&session_id);
+            if let Some(session) = removed {
                 if let Some(core) = session._core {
                     core.cancel_all_sessions();
                 }
@@ -816,12 +842,13 @@ mod platform {
                 if let Some(task) = session._event_task {
                     task.abort();
                 }
-                // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态
+                // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态（此时已不持有任何锁）
                 on_event(
-                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id})
+                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id, "mode": "tun"})
                         .to_string(),
                 );
             }
+            let _ = runtime_done_tx.send(());
         });
 
         Ok(json!({
@@ -864,6 +891,15 @@ mod platform {
         }
         if let Some(task) = session._event_task {
             task.abort();
+        }
+        // 等待 TUN 运行时真正退出（含系统路由/DNS 还原）后再返回：
+        // 「断开→立刻重连」时，旧会话的异步 tproxy 还原若晚于新会话的 setup 执行，
+        // 会把新会话刚写入的路由/DNS 一并还原掉，出现「已连接但完全无流量」。
+        // 此处未持有任何锁，await 安全；超时兜底避免运行时卡死时阻塞 stop。
+        if let Some(done) = session.runtime_done {
+            if timeout(Duration::from_secs(10), done).await.is_err() {
+                log::warn!("VPN session {session_id} runtime did not exit within 10s after stop");
+            }
         }
         Ok(json!({"ok": true, "session_id": session_id}).to_string())
     }

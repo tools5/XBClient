@@ -50,6 +50,10 @@
     <string name="section_about">このアプリについて</string>
     <string name="section_appearance">外観</string>
 
+    <string name="routing_mode_rule">ルール</string>
+    <string name="routing_mode_global">グローバル</string>
+    <string name="routing_mode_direct">直接</string>
+
     <string name="status_connected">接続済み</string>
     <string name="status_disconnected">未接続</string>
     <string name="status_connecting">接続中</string>

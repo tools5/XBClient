@@ -73,10 +73,12 @@ function navActive(itemPath: string): boolean {
 onMounted(async () => {
   cleanupZoom = preventDesktopZoom()
   try {
+    // 后端会话消亡（崩溃/自然退出）时自动归零前端连接状态。
+    // 必须在 bootstrapApp 之前注册：bootstrapApp 内部会自动建立连接，
+    // 若启动会话随即消亡，晚注册会漏掉 vpn_session_closed，UI 永远残留「已连接」
+    if (isDesktop) cleanupSessionWatch = onAeronEvent(handleAerionBackendEvent)
     await bootstrapApp()
     if (isDesktop && appState.capabilities?.tray) cleanupTraySync = installElectronTraySync()
-    // 后端会话消亡（崩溃/自然退出）时自动归零前端连接状态
-    if (isDesktop) cleanupSessionWatch = onAeronEvent(handleAerionBackendEvent)
     if (!appState.authData && route.path !== '/login') await router.replace('/login')
     if (appState.authData && route.path === '/login') await router.replace('/home')
   } catch (error) {
