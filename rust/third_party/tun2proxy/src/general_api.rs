@@ -261,11 +261,22 @@ pub async fn general_run_async(
 
     let join_handle = tokio::spawn(crate::run(device, tun_mtu, args.clone(), shutdown_token.clone()));
 
-    match join_handle.await? {
-        Ok(sessions) => {
-            #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
-            tproxy_config::tproxy_remove(restore).await?;
+    let join_result = join_handle.await;
 
+    // Restore system routes/DNS unconditionally BEFORE reporting the outcome.
+    // The original code awaited tproxy_remove only on the Ok path; on the Err/panic
+    // paths `restore` was merely dropped and TproxyState's Drop impl spawns the
+    // restore as a DETACHED task — so callers awaiting this function could observe
+    // "runtime exited" while the route/DNS restore was still pending, and a restore
+    // running late wipes the routes of the next session (connected-but-no-traffic).
+    // tproxy-config's _tproxy_remove is idempotent, so the residual Drop is a no-op.
+    #[cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))]
+    if let Err(err) = tproxy_config::tproxy_remove(restore).await {
+        log::warn!("failed to restore network configuration: {err}");
+    }
+
+    match join_result? {
+        Ok(sessions) => {
             let max_sessions = args.max_sessions;
             if args.exit_on_fatal_error && sessions >= max_sessions {
                 let info = format!("Forced exit due to max sessions reached ({sessions}/{max_sessions})");

@@ -1718,12 +1718,32 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         if (mode != ROUTING_MODE_RULE && mode != ROUTING_MODE_GLOBAL && mode != ROUTING_MODE_DIRECT) {
             return
         }
-        if (_uiState.value.routingMode == mode) {
+        val state = _uiState.value
+        if (state.routingMode == mode) {
             return
         }
-        val reconnect = _uiState.value.vpnRequested
+        // 已连接时切到 rule/global 需要真实节点：直连模式允许在零节点下连接，
+        // 不校验就重连会在 beginVpn 里对空节点列表越界崩溃（主线程），
+        // 或把公告伪节点/不支持的协议原样下发给服务导致原始错误断开
+        if (state.vpnRequested && mode != ROUTING_MODE_DIRECT) {
+            if (state.anyTlsNodes.isEmpty()) {
+                emitMessage("节点尚未同步完成。")
+                return
+            }
+            val selectedIndex = resolveSelectedNodeIndex(state.anyTlsNodes, state.selectedNodeIndex)
+            val selectedNode = state.anyTlsNodes.getOrNull(selectedIndex)
+            if (selectedNode == null || selectedNode.isInfo || !selectedNode.connectSupported) {
+                emitMessage("订阅中没有可连接的节点。")
+                return
+            }
+            updateAndPersist { it.copy(routingMode = mode, selectedNodeIndex = selectedIndex) }
+            beginVpn(app, selectedIndex)
+            return
+        }
+        val reconnect = state.vpnRequested
         updateAndPersist { it.copy(routingMode = mode) }
         if (reconnect) {
+            // 切到直连模式：重连不依赖节点列表
             beginVpn(app, _uiState.value.selectedNodeIndex)
         }
     }
@@ -1741,7 +1761,13 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         val nodeJson = if (state.routingMode == ROUTING_MODE_DIRECT) {
             """{"type":"direct","name":"DIRECT"}"""
         } else {
-            state.anyTlsNodes[selectedIndex].rawJson
+            // 防御：调用方已校验，但空列表/越界绝不能在主线程抛出（会连带杀死 VPN 服务进程）
+            val node = state.anyTlsNodes.getOrNull(selectedIndex)
+            if (node == null) {
+                emitMessage("连接启动失败：节点尚未同步完成。")
+                return
+            }
+            node.rawJson
         }
         val routeConfigYaml = if (state.routingMode == ROUTING_MODE_RULE) {
             state.customRouteConfigYaml.ifBlank { state.routeConfigYaml }

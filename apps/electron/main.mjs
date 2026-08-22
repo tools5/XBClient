@@ -293,8 +293,10 @@ function backendStart() {
     try {
       const msg = JSON.parse(text)
       if (msg?.type === 'event') {
-        handleBackendSessionEvent(msg.payload)
+        // 必须先转发给渲染进程、再改托盘态：handleBackendSessionEvent 会推送 {vpn:null}，
+        // 若先推送，渲染端在收到 aerion-event 前就被清掉 vpn，自愈分支（清系统代理）早退失效
         if (mainWindow) mainWindow.webContents.send('aerion-event', msg.payload)
+        handleBackendSessionEvent(msg.payload)
         return
       }
       if (msg?.type === 'log') {
@@ -625,8 +627,15 @@ function handleBackendSessionEvent(payload) {
   const currentIsTun = trayState.vpn && !trayState.vpn.routeMode && !trayState.vpn.socksAddr
   if (currentIsTun && trayState.vpn.sessionId === sessionId) {
     trayState.vpn = null
+    // 兜底：不依赖渲染进程存活，主进程自己清掉指向已死会话的系统代理
+    if (trayState.systemProxyOn) {
+      trayState.systemProxyOn = false
+      backendInvoke('system_proxy_clear', {}).catch((err) => {
+        console.error('[self-heal] system proxy clear failed', err instanceof Error ? err.message : String(err))
+      })
+    }
     rebuildTrayMenu()
-    pushTrayStateToWeb({ vpn: null })
+    pushTrayStateToWeb({ vpn: null, systemProxyOn: trayState.systemProxyOn })
   }
 }
 

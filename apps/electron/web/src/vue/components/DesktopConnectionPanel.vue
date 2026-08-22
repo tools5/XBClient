@@ -50,20 +50,27 @@ async function run(action: () => Promise<string | null>) {
   if (message) error.value = message
 }
 
+// 注意顺序：先调 set*（同步入队 applyDesktopConnection 并置忙，开关立刻禁用），
+// 再持久化设置——反过来会在 await persistSettings 期间留下可二次点击的空窗
 async function onRoutingMode(mode: 'rule' | 'global' | 'direct') {
   if (mode === appState.settings.routingMode) return
+  const result = run(() => setRoutingMode(mode))
   await persistSettings({ routingMode: mode })
-  await run(() => setRoutingMode(mode))
+  await result
 }
 
 async function onTunToggle(value: boolean | null) {
-  await persistSettings({ tunEnabled: value === true })
-  await run(() => setTunEnabled(value === true))
+  const enabled = value === true
+  const result = run(() => setTunEnabled(enabled))
+  await persistSettings({ tunEnabled: enabled })
+  await result
 }
 
 async function onProxyToggle(value: boolean | null) {
-  await persistSettings({ systemProxyEnabled: value === true })
-  await run(() => setSystemProxyEnabled(value === true))
+  const enabled = value === true
+  const result = run(() => setSystemProxyEnabled(enabled))
+  await persistSettings({ systemProxyEnabled: enabled })
+  await result
 }
 </script>
 

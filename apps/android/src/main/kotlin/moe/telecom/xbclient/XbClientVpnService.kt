@@ -212,8 +212,34 @@ class XbClientVpnService : VpnService() {
     }
 
     override fun onDestroy() {
+        // onDestroy 在主线程执行（如 onRevoke → stopSelf），而 AerionCore.stopVpn
+        // 现在会同步等待 TUN 运行时完全退出（最长 10s）——绝不能在主线程调用，
+        // 否则输入分发 ANR。这里主线程只做轻量状态收尾，native 停止移交独立线程
+        //（该线程不依赖 serviceScope/vpnDispatcher，finally 里的 cancel/close 不影响它）。
         try {
-            stopCurrentVpn()
+            stopStatsTicker()
+            val sessionId = vpnSessionId
+            val routeSessionId = currentRouteSessionId
+            val tun = tunInterface
+            vpnSessionId = 0L
+            currentRouteSessionId = 0L
+            tunInterface = null
+            currentSocksAddr = ""
+            sessionBaseRxBytes = 0L
+            sessionBaseTxBytes = 0L
+            lastSampleRxBytes = 0L
+            lastSampleTxBytes = 0L
+            lastSampleAtMs = 0L
+            try {
+                unregisterUnderlyingNetworkTracking()
+            } catch (error: Throwable) {
+                Log.e("XBClient", "unregister network tracking during destroy failed", error)
+            }
+            publishVpnState(false)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            if (sessionId != 0L || routeSessionId != 0L || tun != null) {
+                stopNativeSessionsAsync(sessionId, routeSessionId, tun)
+            }
         } finally {
             serviceScope.cancel()
             vpnDispatcher.close()
@@ -222,6 +248,34 @@ class XbClientVpnService : VpnService() {
             }
             super.onDestroy()
         }
+    }
+
+    /** 在独立线程停止 native 会话并关闭 TUN fd；顺序与 stopNativeVpn 保持一致。 */
+    private fun stopNativeSessionsAsync(sessionId: Long, routeSessionId: Long, tun: ParcelFileDescriptor?) {
+        Thread({
+            if (sessionId != 0L) {
+                try {
+                    val result = AerionCore.stopVpn(sessionId)
+                    Log.i("XBClient", "VPN stopped: $result")
+                } catch (error: Throwable) {
+                    // 停止失败（含会话已不存在）视为会话已消亡
+                    Log.e("XBClient", "stop VPN failed; treating session as already stopped", error)
+                }
+            }
+            if (routeSessionId != 0L) {
+                try {
+                    val result = AerionCore.stopRoute(routeSessionId)
+                    Log.i("XBClient", "route stopped: $result")
+                } catch (error: Throwable) {
+                    Log.e("XBClient", "stop route failed; treating session as already stopped", error)
+                }
+            }
+            try {
+                tun?.close()
+            } catch (error: Throwable) {
+                Log.e("XBClient", "close TUN interface failed", error)
+            }
+        }, "xbclient-vpn-teardown").start()
     }
 
     private fun startVpn(nodeJson: String?, excludedApps: String?, allowedApps: String?, nodeDns: String, overseasDns: String, directDns: String, dnsMode: String, virtualDnsPool: String, ipv6Enabled: Boolean, routeConfigYaml: String, geoipDir: String) {
@@ -496,10 +550,20 @@ class XbClientVpnService : VpnService() {
     }
 
     private fun currentNodeName(): String {
-        val node = JSONObject(currentNodeJson)
-        val host = node.getString("host")
-        val name = node.getString("name").trim()
-        if (name.isEmpty() || name == host || name == "$host:${node.getInt("port")}" || host.isNotEmpty() && name.contains(host)) {
+        // 必须整体容错：本函数在连接成功后的通知文案/状态广播里调用，
+        // 任何异常都会被 ACTION_* 的 catch(Throwable) 捕获并触发 stopCurrentVpn，
+        // 把刚建立的会话立刻拆掉（direct 伪节点没有 host/port，getString 会抛 JSONException）
+        val node = try {
+            JSONObject(currentNodeJson)
+        } catch (_: Throwable) {
+            return getString(R.string.node_default_name, currentNodeIndex + 1)
+        }
+        if (node.optString("type").equals("direct", ignoreCase = true)) {
+            return getString(R.string.routing_mode_direct)
+        }
+        val host = node.optString("host")
+        val name = node.optString("name").trim()
+        if (name.isEmpty() || name == host || name == "$host:${node.optInt("port")}" || host.isNotEmpty() && name.contains(host)) {
             return getString(R.string.node_default_name, currentNodeIndex + 1)
         }
         return name

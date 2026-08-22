@@ -542,10 +542,15 @@ mod platform {
     use aerion::{
         TunCancellationToken, TunConfig, TunDnsStrategy, TunVerbosity, socks_proxy_url, spawn_tun,
     };
+    use std::sync::atomic::AtomicUsize;
 
     static NEXT_VPN_SESSION_ID: AtomicU64 = AtomicU64::new(1);
     static VPN_SESSIONS: Lazy<StdMutex<HashMap<u64, VpnSession>>> =
         Lazy::new(|| StdMutex::new(HashMap::new()));
+    // 仍在运行（含正在收尾）的 TUN 运行时数量。stop 的 10s 超时兜底返回后，
+    // 旧运行时可能仍未退出；此时 start 必须快速失败而不是再起一个运行时
+    // （双运行时会争抢同一 tun_fd/设备，且旧运行时迟到的收尾会破坏新会话）。
+    static LIVE_TUN_RUNTIMES: AtomicUsize = AtomicUsize::new(0);
 
     struct VpnSession {
         shutdown: TunCancellationToken,
@@ -605,7 +610,18 @@ mod platform {
 
         let log_bridge = aerion::LogBridge::new();
 
-        let runtime = spawn_tun(tun_config).context("spawn Aerion TUN runtime")?;
+        // 原子占位：若上一个 TUN 运行时仍在收尾（stop 超时兜底路径），快速失败并可重试
+        if LIVE_TUN_RUNTIMES.fetch_add(1, Ordering::SeqCst) > 0 {
+            LIVE_TUN_RUNTIMES.fetch_sub(1, Ordering::SeqCst);
+            bail!("上一个 VPN 运行时仍在退出，请稍后重试。");
+        }
+        let runtime = match spawn_tun(tun_config).context("spawn Aerion TUN runtime") {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                LIVE_TUN_RUNTIMES.fetch_sub(1, Ordering::SeqCst);
+                return Err(error);
+            }
+        };
         let shutdown = runtime.shutdown_token();
         let session_id = NEXT_VPN_SESSION_ID.fetch_add(1, Ordering::SeqCst);
         let (runtime_done_tx, runtime_done_rx) = tokio::sync::oneshot::channel::<()>();
@@ -667,6 +683,8 @@ mod platform {
                         .to_string(),
                 );
             }
+            // 运行时已完全退出：先释放「活跃运行时」占位，再发 done 信号
+            LIVE_TUN_RUNTIMES.fetch_sub(1, Ordering::SeqCst);
             let _ = runtime_done_tx.send(());
         });
 
@@ -723,10 +741,16 @@ mod platform {
         TunCancellationToken, TunConfig, TunDnsStrategy, TunVerbosity, socks_proxy_url, spawn_tun,
     };
     use std::net::IpAddr;
+    use std::sync::atomic::AtomicUsize;
 
     static NEXT_VPN_SESSION_ID: AtomicU64 = AtomicU64::new(1);
     static VPN_SESSIONS: Lazy<StdMutex<HashMap<u64, VpnSession>>> =
         Lazy::new(|| StdMutex::new(HashMap::new()));
+    // 仍在运行（含正在收尾）的 TUN 运行时数量。stop 的 10s 超时兜底返回后，
+    // 旧运行时可能仍未退出；此时 start 必须快速失败而不是再起一个运行时
+    // （Windows wintun 使用固定 GUID，双运行时必然冲突，且旧运行时迟到的
+    // tproxy 还原会抹掉新会话的路由/DNS）。
+    static LIVE_TUN_RUNTIMES: AtomicUsize = AtomicUsize::new(0);
 
     struct VpnSession {
         shutdown: TunCancellationToken,
@@ -781,7 +805,18 @@ mod platform {
         tun_config.verbosity = TunVerbosity::Info;
 
         let log_bridge = aerion::LogBridge::new();
-        let runtime = spawn_tun(tun_config).context("spawn Aerion TUN runtime")?;
+        // 原子占位：若上一个 TUN 运行时仍在收尾（stop 超时兜底路径），快速失败并可重试
+        if LIVE_TUN_RUNTIMES.fetch_add(1, Ordering::SeqCst) > 0 {
+            LIVE_TUN_RUNTIMES.fetch_sub(1, Ordering::SeqCst);
+            bail!("上一个 VPN 运行时仍在退出，请稍后重试。");
+        }
+        let runtime = match spawn_tun(tun_config).context("spawn Aerion TUN runtime") {
+            Ok(runtime) => runtime,
+            Err(error) => {
+                LIVE_TUN_RUNTIMES.fetch_sub(1, Ordering::SeqCst);
+                return Err(error);
+            }
+        };
         let shutdown = runtime.shutdown_token();
         let session_id = NEXT_VPN_SESSION_ID.fetch_add(1, Ordering::SeqCst);
 
@@ -848,6 +883,8 @@ mod platform {
                         .to_string(),
                 );
             }
+            // 运行时已完全退出（含 tproxy 路由/DNS 还原）：先释放「活跃运行时」占位，再发 done 信号
+            LIVE_TUN_RUNTIMES.fetch_sub(1, Ordering::SeqCst);
             let _ = runtime_done_tx.send(());
         });
 
