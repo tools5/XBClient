@@ -234,11 +234,36 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     // MARK: - 状态与事件
 
     private func handleEvent(_ json: String) {
+        // traffic_recorded 是高频事件（千字节级粒度），不进日志、节流写盘，
+        // 只把累计上下行字节记进结构化状态供 App 展示速度/用量。
+        if json.contains("\"traffic_recorded\"") {
+            guard let data = json.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  obj["type"] as? String == "traffic_recorded" else { return }
+            let up = (obj["upload_bytes"] as? NSNumber)?.int64Value
+            let down = (obj["download_bytes"] as? NSNumber)?.int64Value
+            statusQueue.async {
+                if let up { self.currentStatus.uploadBytes = up }
+                if let down { self.currentStatus.downloadBytes = down }
+                self.writeTrafficThrottled()
+            }
+            return
+        }
         appendLog("[event] \(json)")
         // 隧道运行时非预期退出：内核发 vpn_session_closed，反映为失败态供 App 展示。
         if json.contains("vpn_session_closed") {
             setState(.failed, message: "隧道运行时退出")
         }
+    }
+
+    // 流量状态写盘节流：最快 1 秒一次（statusQueue 上调用）。
+    private var lastTrafficWriteAt: TimeInterval = 0
+    private func writeTrafficThrottled() {
+        let now = Date().timeIntervalSince1970
+        guard now - lastTrafficWriteAt >= 1.0 else { return }
+        lastTrafficWriteAt = now
+        currentStatus.updatedAt = now
+        StatusChannel.write(currentStatus)
     }
 
     private func finishStart(error: Error, completionHandler: @escaping (Error?) -> Void) {

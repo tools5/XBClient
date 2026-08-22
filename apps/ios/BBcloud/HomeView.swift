@@ -13,6 +13,13 @@ struct HomeView: View {
     // 首页节点选择面板。
     @State private var showNodePicker = false
 
+    // 速度计算：上一次流量采样（累计上/下行字节 + status.updatedAt）与当前速率。
+    @State private var lastTrafficSample: (up: Int64, down: Int64, at: Double)?
+    @State private var uploadSpeed: Double = 0
+    @State private var downloadSpeed: Double = 0
+    // 每秒重算一次速度；扩展侧流量写盘也是 1 秒节流，节奏匹配。
+    private let speedTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+
     private var state: NEVPNStatus { appState.connectionState }
     private var isConnected: Bool { state == .connected }
     private var canConnect: Bool { appState.selectedNode != nil }
@@ -50,8 +57,15 @@ struct HomeView: View {
             switch newValue {
             case .connected:
                 if connectedAt == nil { connectedAt = Date() }
+                // 新会话：清掉上一会话的流量采样，避免跨会话算出脏速率。
+                lastTrafficSample = nil
+                uploadSpeed = 0
+                downloadSpeed = 0
             case .disconnected, .invalid:
                 connectedAt = nil
+                lastTrafficSample = nil
+                uploadSpeed = 0
+                downloadSpeed = 0
             default:
                 break
             }
@@ -158,16 +172,28 @@ struct HomeView: View {
         }
     }
 
-    // MARK: - 实时速度（连接后显示，暂为占位）
+    // MARK: - 实时速度与本次会话流量
 
     private var speedRow: some View {
-        HStack(spacing: 12) {
-            speedTile(icon: "arrow.up", title: "上行", value: "--", tint: .green)
-            speedTile(icon: "arrow.down", title: "下行", value: "--", tint: .blue)
+        let status = appState.tunnel.status
+        return HStack(spacing: 12) {
+            speedTile(
+                icon: "arrow.up", title: "上行",
+                speed: uploadSpeed,
+                total: status.uploadBytes,
+                tint: .green
+            )
+            speedTile(
+                icon: "arrow.down", title: "下行",
+                speed: downloadSpeed,
+                total: status.downloadBytes,
+                tint: .blue
+            )
         }
+        .onReceive(speedTimer) { _ in updateSpeeds() }
     }
 
-    private func speedTile(icon: String, title: String, value: String, tint: Color) -> some View {
+    private func speedTile(icon: String, title: String, speed: Double, total: Int64?, tint: Color) -> some View {
         VStack(spacing: 6) {
             HStack(spacing: 5) {
                 Image(systemName: icon)
@@ -177,12 +203,43 @@ struct HomeView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
-            Text(value)
+            Text("\(formatBytes(speed))/s")
                 .font(.system(.title3, design: .monospaced).weight(.semibold))
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+            // 本次会话累计用量；旧版扩展无此字段时显示 --。
+            Text(total.map { "共 \(formatBytes(Double($0)))" } ?? "共 --")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 14)
         .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+    }
+
+    // 速度 = 相邻两次流量采样的字节差 / 时间差。扩展只在有流量时写盘，
+    // 静默 3 秒以上视为无流量，速率归零。
+    private func updateSpeeds() {
+        let status = appState.tunnel.status
+        guard state == .connected, let up = status.uploadBytes, let down = status.downloadBytes else {
+            lastTrafficSample = nil
+            uploadSpeed = 0
+            downloadSpeed = 0
+            return
+        }
+        guard let prev = lastTrafficSample else {
+            lastTrafficSample = (up, down, status.updatedAt)
+            return
+        }
+        if status.updatedAt > prev.at {
+            let dt = status.updatedAt - prev.at
+            uploadSpeed = max(0, Double(up - prev.up) / dt)
+            downloadSpeed = max(0, Double(down - prev.down) / dt)
+            lastTrafficSample = (up, down, status.updatedAt)
+        } else if Date().timeIntervalSince1970 - status.updatedAt > 3 {
+            uploadSpeed = 0
+            downloadSpeed = 0
+        }
     }
 
     // MARK: - 错误信息

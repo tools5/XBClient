@@ -172,8 +172,8 @@ struct SubscriptionView: View {
 
 // MARK: - 格式化
 
-// 字节数 → "1.2 GB" 风格文本，1024 进制，与面板展示一致。
-private func formatBytes(_ bytes: Double) -> String {
+// 字节数 → "1.2 GB" 风格文本，1024 进制，与面板展示一致。（HomeView 也在用）
+func formatBytes(_ bytes: Double) -> String {
     let units = ["B", "KB", "MB", "GB", "TB", "PB"]
     var value = max(0, bytes)
     var index = 0

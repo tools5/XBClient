@@ -67,6 +67,10 @@ struct TunnelStatus: Codable {
     var sessionId: Int64
     var logs: [String]
     var updatedAt: Double
+    // 本次隧道会话累计流量（字节），扩展从内核 traffic_recorded 事件更新。
+    // 可选类型：兼容旧版扩展写出的、不含这两个键的 status.json。
+    var uploadBytes: Int64? = nil
+    var downloadBytes: Int64? = nil
 
     static let empty = TunnelStatus(state: .disconnected, message: "", sessionId: 0, logs: [], updatedAt: 0)
 }
