@@ -54,6 +54,69 @@ const CONNECT_SUPPORTED = new Set([
   'block',
 ])
 
+// 面板管理员塞进订阅里的公告条目（“剩余流量: xx”“套餐到期: xx”等），
+// 名称命中公告模式或 host 为占位值即视为信息条目，不参与连接与测速。
+const INFO_NODE_NAME_RE = new RegExp(
+  [
+    '剩余流量',
+    '套餐到期',
+    '到期时间',
+    '距离.*重置',
+    '流量重置',
+    '重置日',
+    '官网',
+    '官方网站',
+    '公告',
+    '温馨提示',
+    'expires?(\\s+(at|on))?\\s*[:：]',
+    'expiry',
+    'traffic\\s*reset',
+    'remaining\\s*(traffic|data)',
+    'days?\\s*left',
+  ].join('|'),
+  'i',
+)
+
+function isPlaceholderNodeHost(value: string): boolean {
+  const host = normalizeNodeHost(value).toLowerCase()
+  if (!host) return true
+  if (host === 'localhost' || host === '::' || host === '::1') return true
+  if (/^0\./.test(host) || /^127\./.test(host)) return true
+  if (/(^|\.)example\.(com|net|org)$/.test(host) || host.endsWith('.example') || host.endsWith('.invalid') || host.endsWith('.test')) return true
+  if (isIpLiteral(host)) return false
+  // 无效域名形态：非 IP 且不符合 “label.label” 域名结构
+  return !/^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$/.test(host)
+}
+
+export function isInfoNodeEntry(name: string, host: string): boolean {
+  return INFO_NODE_NAME_RE.test(name.trim()) || isPlaceholderNodeHost(host)
+}
+
+/** 第一个既非信息条目又支持连接的节点索引；没有则返回 -1。 */
+export function firstConnectableNodeIndex(nodes: AppNode[]): number {
+  return nodes.findIndex((node) => node.connectSupported && !node.isInfo)
+}
+
+/**
+ * 校正节点索引：若首选索引指向信息条目/不支持连接的节点（含持久化的旧索引），
+ * 回退到第一个可连接节点；没有可连接节点时返回 -1。
+ */
+export function resolveConnectableNodeIndex(nodes: AppNode[], preferred: number): number {
+  const node = nodes[preferred]
+  if (node && node.connectSupported && !node.isInfo) return preferred
+  return firstConnectableNodeIndex(nodes)
+}
+
+/** 重新计算缓存节点的 isInfo/connectSupported（旧版本持久化数据没有 isInfo 字段）。 */
+export function normalizeAppNode(node: AppNode): AppNode {
+  const isInfo = isInfoNodeEntry(node.name ?? '', node.host ?? '')
+  return {
+    ...node,
+    isInfo,
+    connectSupported: CONNECT_SUPPORTED.has(node.protocol) && !isInfo,
+  }
+}
+
 export function toAppNode(raw: RawNode): AppNode {
   if (typeof raw.type !== 'string' || !raw.type.trim()) throw new Error('XBClient 节点缺少 type。')
   if (typeof raw.host !== 'string' || !raw.host.trim()) throw new Error('XBClient 节点缺少 host。')
@@ -75,6 +138,7 @@ export function toAppNode(raw: RawNode): AppNode {
     if (sni) normalized.sni = sni
     else if (currentSni) delete normalized.sni
   }
+  const isInfo = isInfoNodeEntry(raw.name, host)
   return {
     protocol,
     protocolLabel: protocolLabel(protocol),
@@ -82,7 +146,8 @@ export function toAppNode(raw: RawNode): AppNode {
     host,
     port,
     tags: nodeTags(raw),
-    connectSupported: CONNECT_SUPPORTED.has(protocol),
+    isInfo,
+    connectSupported: CONNECT_SUPPORTED.has(protocol) && !isInfo,
     rawJson: JSON.stringify(normalized),
   }
 }

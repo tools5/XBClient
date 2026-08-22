@@ -19,7 +19,7 @@ import {
 import { parseNoticeMarkdown, type NoticeSpan } from '../../notice-markdown'
 import DesktopConnectionPanel from '../components/DesktopConnectionPanel.vue'
 import SubscriptionBlockedPanel from '../components/SubscriptionBlockedPanel.vue'
-import { displayNodeName, dnsAddressForVpn } from '../../nodes'
+import { displayNodeName, dnsAddressForVpn, resolveConnectableNodeIndex } from '../../nodes'
 import { formatDuration, formatTrafficBytes, publicErrorText } from '../../format'
 import { syncSubscription } from '../../subscription-sync'
 import { appState, store, t } from '../state'
@@ -33,8 +33,11 @@ let connectedAt = 0
 let durationTimer = 0
 let unlistenEvent: (() => void) | null = null
 
-const selectedNodeIndex = computed(() => appState.vpn?.nodeIndex ?? appState.preferredNodeIndex)
-const selectedNode = computed(() => appState.nodes[selectedNodeIndex.value] || appState.nodes[0])
+// 选中索引可能指向订阅里的信息条目（“剩余流量”等公告伪节点），展示与连接都校正为真实节点
+const selectedNodeIndex = computed(() =>
+  appState.vpn?.nodeIndex ?? resolveConnectableNodeIndex(appState.nodes, appState.preferredNodeIndex),
+)
+const selectedNode = computed(() => appState.nodes[selectedNodeIndex.value])
 const progressPercent = computed(() =>
   appState.subscription.trafficTotalBytes > 0
     ? Math.min(100, (appState.subscription.trafficUsedBytes / appState.subscription.trafficTotalBytes) * 100)
@@ -97,13 +100,16 @@ function startDuration() {
 async function toggleConnection(index = selectedNodeIndex.value) {
   const useTun = appState.capabilities?.vpn === true
   if (appState.vpn) {
-    if (useTun) await aerionStopVpn(appState.vpn.sessionId)
-    else {
-      await aerionStop(appState.vpn.sessionId)
-      if (appState.settings.autoApplyProxy || appState.systemProxyActive) {
-        await systemProxyClear()
-        store().setSystemProxyActive(false)
-      }
+    try {
+      if (useTun) await aerionStopVpn(appState.vpn.sessionId)
+      else await aerionStop(appState.vpn.sessionId)
+    } catch (err) {
+      // 停止失败（含会话已不存在）视为会话已消亡，继续清空本地状态
+      console.warn('stop VPN session failed; treating session as already stopped', err)
+    }
+    if (!useTun && (appState.settings.autoApplyProxy || appState.systemProxyActive)) {
+      await systemProxyClear()
+      store().setSystemProxyActive(false)
     }
     store().setVpn(null)
     if (useTun) await reportVpnSession(null)
@@ -112,7 +118,7 @@ async function toggleConnection(index = selectedNodeIndex.value) {
     return
   }
   const node = appState.nodes[index]
-  if (!node) return
+  if (!node || node.isInfo || !node.connectSupported) return
   connectingIndex.value = index
   error.value = ''
   try {
@@ -211,7 +217,7 @@ function formatUnixTime(value: number): string {
             size="large"
             block
             :variant="appState.vpn ? 'tonal' : 'flat'"
-            :disabled="connectingIndex !== null || (!appState.vpn && Boolean(selectedNode && !selectedNode.connectSupported))"
+            :disabled="connectingIndex !== null || (!appState.vpn && (!selectedNode || !selectedNode.connectSupported))"
             @click="toggleConnection()"
           >
             {{ connectingIndex !== null ? t('action_connecting') : appState.vpn ? t('action_disconnect') : t('action_connect') }}
@@ -249,7 +255,9 @@ function formatUnixTime(value: number): string {
           <div class="d-flex align-center">
             <div class="flex-grow-1">
               <h3 class="text-h6">
-                {{ selectedNode ? displayNodeName(selectedNode, selectedNodeIndex) : (loading ? t('refreshing') : t('no_nodes')) }}
+                {{ selectedNode
+                  ? displayNodeName(selectedNode, selectedNodeIndex)
+                  : (loading ? t('refreshing') : (appState.nodes.length ? t('no_node_selected') : t('no_nodes'))) }}
               </h3>
               <p v-if="selectedNode" class="muted mt-1">
                 {{ selectedNode.protocolLabel }}

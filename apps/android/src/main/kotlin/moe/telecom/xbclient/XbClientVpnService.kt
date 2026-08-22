@@ -115,7 +115,22 @@ class XbClientVpnService : VpnService() {
                         if (nodes.length() == 0) {
                             throw IllegalStateException("node list is empty")
                         }
-                        currentNodeIndex = (currentNodeIndex + 1) % nodes.length()
+                        // 轮换时跳过订阅里的信息条目（公告伪节点）与不支持的协议
+                        var nextIndex = currentNodeIndex
+                        var found = false
+                        for (step in 1..nodes.length()) {
+                            val candidate = (currentNodeIndex + step) % nodes.length()
+                            val candidateNode = nodes.getJSONObject(candidate).toAnyTlsNode()
+                            if (candidateNode.connectSupported && !candidateNode.isInfo) {
+                                nextIndex = candidate
+                                found = true
+                                break
+                            }
+                        }
+                        if (!found) {
+                            throw IllegalStateException("no connectable node in list")
+                        }
+                        currentNodeIndex = nextIndex
                         currentNodeJson = nodes.getJSONObject(currentNodeIndex).toString()
                         startVpn(currentNodeJson, currentExcludedApps, currentAllowedApps, currentNodeDns, currentOverseasDns, currentDirectDns, currentDnsMode, currentVirtualDnsPool, currentIpv6Enabled, currentRouteConfigYaml, currentGeoipDir)
                         startForegroundNotification(connectedNotificationText())
@@ -391,8 +406,8 @@ class XbClientVpnService : VpnService() {
                 val result = AerionCore.stopVpn(vpnSessionId)
                 Log.i("XBClient", "VPN stopped: $result")
             } catch (error: Throwable) {
-                Log.e("XBClient", "stop VPN failed", error)
-                throw IllegalStateException("stop VPN failed", error)
+                // 停止失败（含会话已不存在）视为会话已消亡，不中断切换/重连流程
+                Log.e("XBClient", "stop VPN failed; treating session as already stopped", error)
             }
             vpnSessionId = 0L
         }
@@ -401,8 +416,8 @@ class XbClientVpnService : VpnService() {
                 val result = AerionCore.stopRoute(currentRouteSessionId)
                 Log.i("XBClient", "route stopped: $result")
             } catch (error: Throwable) {
-                Log.e("XBClient", "stop route failed", error)
-                throw IllegalStateException("stop route failed", error)
+                // 停止失败（含会话已不存在）视为会话已消亡，不中断切换/重连流程
+                Log.e("XBClient", "stop route failed; treating session as already stopped", error)
             }
             currentRouteSessionId = 0L
         }

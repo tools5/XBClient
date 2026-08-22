@@ -5,6 +5,7 @@ import { resolveAppNode } from '../../api/system'
 import {
   displayNodeName,
   readableNodeTestError,
+  resolveConnectableNodeIndex,
   targetHostPort,
 } from '../../nodes'
 import { applyDesktopConnection, isDesktopConnectionShell } from '../../desktop/connection'
@@ -21,7 +22,10 @@ const nodeTestAvailable = isElectronShell()
 const testingAll = ref(false)
 const error = ref('')
 
-const selectedNodeIndex = computed(() => appState.vpn?.nodeIndex ?? appState.preferredNodeIndex)
+// 选中索引若指向信息条目（订阅公告伪节点），校正为第一个可连接节点
+const selectedNodeIndex = computed(() =>
+  appState.vpn?.nodeIndex ?? resolveConnectableNodeIndex(appState.nodes, appState.preferredNodeIndex),
+)
 
 const testingBusy = ref(false)
 
@@ -46,6 +50,7 @@ async function runNodeTest(node: AppNode, index: number) {
 }
 
 async function testOne(node: AppNode, index: number) {
+  if (node.isInfo) return
   if (!nodeTestAvailable) {
     error.value = t('node_test_desktop_only')
     return
@@ -71,6 +76,8 @@ async function testAll() {
   error.value = ''
   const queue: number[] = []
   for (let i = 0; i < appState.nodes.length; i++) {
+    // 信息条目不参与「测试全部」，也不显示错误文案
+    if (appState.nodes[i].isInfo) continue
     if (!appState.nodes[i].connectSupported) {
       store().setNodeResult(i, { testError: t('unsupported_protocol') })
       continue
@@ -101,6 +108,8 @@ async function testAll() {
 async function selectNode(index: number) {
   const node = appState.nodes[index]
   if (!node) return
+  // 信息条目仅展示，不可选中连接
+  if (node.isInfo) return
   if (!node.connectSupported) {
     error.value = t('unsupported_protocol')
     return
@@ -148,25 +157,27 @@ async function selectNode(index: number) {
       <v-card
         v-for="(node, index) in appState.nodes"
         :key="`${node.name}-${index}`"
-        class="panel-card interactive-card"
+        class="panel-card"
+        :class="node.isInfo ? 'node-info-card' : 'interactive-card'"
         :variant="index === selectedNodeIndex ? 'tonal' : 'elevated'"
         :color="index === selectedNodeIndex ? 'primary' : undefined"
-        role="button"
-        tabindex="0"
-        :aria-pressed="index === selectedNodeIndex"
-        @click="selectNode(index)"
-        @keydown.enter="selectNode(index)"
-        @keydown.space.prevent="selectNode(index)"
+        :role="node.isInfo ? undefined : 'button'"
+        :tabindex="node.isInfo ? undefined : 0"
+        :aria-pressed="node.isInfo ? undefined : index === selectedNodeIndex"
+        @click="!node.isInfo && selectNode(index)"
+        @keydown.enter="!node.isInfo && selectNode(index)"
+        @keydown.space.prevent="!node.isInfo && selectNode(index)"
       >
         <v-card-text>
           <div class="d-flex align-start justify-space-between gap-2">
             <div class="flex-grow-1 min-width-0">
               <p class="font-weight-bold mb-1">
                 <span v-if="index === selectedNodeIndex">✓ </span>
-                {{ displayNodeName(node, index) }}
+                {{ node.isInfo ? node.name : displayNodeName(node, index) }}
               </p>
               <p class="text-caption text-medium-emphasis mb-0">
-                {{ node.protocolLabel }}{{ node.connectSupported ? '' : ` · ${t('unsupported_protocol')}` }}
+                <template v-if="node.isInfo">{{ t('info_node_tag') }}</template>
+                <template v-else>{{ node.protocolLabel }}{{ node.connectSupported ? '' : ` · ${t('unsupported_protocol')}` }}</template>
               </p>
               <div v-if="node.tags.length" class="d-flex flex-wrap gap-1 mt-2">
               <v-chip
@@ -180,7 +191,7 @@ async function selectNode(index: number) {
               </v-chip>
               </div>
             </div>
-            <div class="text-right">
+            <div v-if="!node.isInfo" class="text-right">
               <p v-if="node.latencyMs" class="text-caption mb-2">{{ node.latencyMs }} ms</p>
               <p v-else-if="node._testing" class="text-caption text-medium-emphasis mb-2">{{ t('node_testing') }}</p>
               <p v-else-if="node.testError" class="text-caption text-error mb-2">{{ node.testError }}</p>

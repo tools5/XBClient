@@ -1,4 +1,5 @@
 import type { AppNode, AppSettings, RouteRoutingState, SubscriptionState } from '.'
+import { normalizeAppNode } from '../nodes'
 
 const SESSION_KEY = 'xbclient.session.v1'
 const SETTINGS_KEY = 'xbclient.settings.v1'
@@ -55,7 +56,8 @@ export async function loadSubscriptionCache(authData: string): Promise<Persisted
   const cache = readJson<PersistedSubscriptionCache>(SUBSCRIPTION_CACHE_KEY)
   if (!cache) return null
   if (cache.authData !== authData) return null
-  return cache
+  // 旧版本缓存的节点没有 isInfo 字段，恢复时重新识别信息条目，避免自动连上公告伪节点
+  return { ...cache, nodes: Array.isArray(cache.nodes) ? cache.nodes.map(normalizeAppNode) : [] }
 }
 
 export async function saveSubscriptionCache(cache: PersistedSubscriptionCache): Promise<void> {

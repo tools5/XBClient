@@ -594,8 +594,6 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                     }
                 }
                 val nodes = if (blockReason.isEmpty()) subscriptionNodes else emptyList()
-                val selectedIndex = _uiState.value.selectedNodeIndex.coerceIn(0, (nodes.size - 1).coerceAtLeast(0))
-                val firstConnectableIndex = nodes.indexOfFirst { it.connectSupported }
                 val next = _uiState.value.copy(
                     subscribeToken = data.optString("token"),
                     subscribeUrl = subscribeUrl,
@@ -605,7 +603,8 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
                     subscriptionTrafficTotalBytes = numericValueOrZero(data.opt("transfer_enable")).toLong(),
                     nodesUpdatedAt = System.currentTimeMillis(),
                     anyTlsNodes = nodes,
-                    selectedNodeIndex = if (nodes.getOrNull(selectedIndex)?.connectSupported == true || firstConnectableIndex < 0) selectedIndex else firstConnectableIndex,
+                    // 信息条目（订阅公告伪节点）与不支持的协议不可作为默认选中节点
+                    selectedNodeIndex = resolveSelectedNodeIndex(nodes, _uiState.value.selectedNodeIndex),
                     nodeTestResults = emptyMap(),
                     routeConfigYaml = subscriptionRouteConfigYaml,
                     routeRuleCount = subscriptionRouteRuleCount,
@@ -1576,6 +1575,10 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         if (index !in nodes.indices) {
             return
         }
+        // 信息条目仅展示，不可选中连接
+        if (nodes[index].isInfo) {
+            return
+        }
         if (!nodes[index].connectSupported) {
             emitMessage("当前内核暂不支持 ${nodes[index].protocolLabel} 节点。")
             return
@@ -1617,6 +1620,9 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
     fun chooseNodeFromDialog(index: Int) {
         val connectAfterSelect = _uiState.value.nodeSwitchConnect
         val node = _uiState.value.anyTlsNodes.getOrNull(index) ?: return
+        if (node.isInfo) {
+            return
+        }
         if (!node.connectSupported) {
             emitMessage("当前内核暂不支持 ${node.protocolLabel} 节点。")
             return
@@ -1630,6 +1636,9 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
     fun testNode(index: Int) {
         val nodes = _uiState.value.anyTlsNodes
         if (index !in nodes.indices) {
+            return
+        }
+        if (nodes[index].isInfo) {
             return
         }
         if (!nodes[index].connectSupported) {
@@ -1652,6 +1661,10 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
         _uiState.update { it.copy(nodesTesting = true, nodeTestResults = emptyMap()) }
         viewModelScope.launch(Dispatchers.IO) {
             for (index in nodes.indices) {
+                // 信息条目不参与「测试全部」，也不显示错误文案
+                if (nodes[index].isInfo) {
+                    continue
+                }
                 if (!nodes[index].connectSupported) {
                     _uiState.update { it.copy(nodeTestResults = it.nodeTestResults + (index to "当前内核暂不支持")) }
                     continue
@@ -1677,8 +1690,12 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             if (state.anyTlsNodes.isEmpty()) {
                 throw IllegalStateException("节点尚未同步完成。")
             }
-            val selectedIndex = state.selectedNodeIndex.coerceIn(0, state.anyTlsNodes.size - 1)
+            // 选中索引可能指向订阅里的信息条目（公告伪节点），连接前校正为第一个可连接节点
+            val selectedIndex = resolveSelectedNodeIndex(state.anyTlsNodes, state.selectedNodeIndex)
             val selectedNode = state.anyTlsNodes[selectedIndex]
+            if (selectedNode.isInfo) {
+                throw IllegalStateException("订阅中没有可连接的节点。")
+            }
             if (!selectedNode.connectSupported) {
                 throw IllegalStateException("当前内核暂不支持 ${selectedNode.protocolLabel} 节点。")
             }
@@ -1953,7 +1970,8 @@ class XbClientViewModel(application: Application) : AndroidViewModel(application
             vpnBaseTxBytes = runtimePrefs.getLong("vpn_base_tx_bytes", currentUidTxBytes())
         }
         _uiState.value = state.copy(
-            selectedNodeIndex = state.selectedNodeIndex.coerceIn(0, (state.anyTlsNodes.size - 1).coerceAtLeast(0)),
+            // 持久化的旧索引可能指向订阅里的信息条目，恢复时校正为第一个可连接节点
+            selectedNodeIndex = resolveSelectedNodeIndex(state.anyTlsNodes, state.selectedNodeIndex),
             vpnConnectedAt = if (state.vpnRequested) runtimePrefs.getLong("vpn_connected_at", 0L) else 0L,
             vpnSessionRxBytes = if (state.vpnRequested) (currentUidRxBytes() - vpnBaseRxBytes).coerceAtLeast(0L) else 0L,
             vpnSessionTxBytes = if (state.vpnRequested) (currentUidTxBytes() - vpnBaseTxBytes).coerceAtLeast(0L) else 0L

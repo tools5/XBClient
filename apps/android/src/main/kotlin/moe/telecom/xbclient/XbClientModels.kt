@@ -97,6 +97,70 @@ data class AnyTlsNode(
             "block" -> true
             else -> false
         }
+
+    /** 订阅里的公告/信息伪节点（“剩余流量”“套餐到期”等），仅展示，不可连接、不测速 */
+    val isInfo: Boolean
+        get() = isInfoNodeEntry(name, host)
+}
+
+// 面板管理员塞进订阅里的公告条目：名称命中公告模式或 host 为占位值即视为信息条目
+private val INFO_NODE_NAME_REGEX = Regex(
+    listOf(
+        "剩余流量",
+        "套餐到期",
+        "到期时间",
+        "距离.*重置",
+        "流量重置",
+        "重置日",
+        "官网",
+        "官方网站",
+        "公告",
+        "温馨提示",
+        "expires?(\\s+(at|on))?\\s*[:：]",
+        "expiry",
+        "traffic\\s*reset",
+        "remaining\\s*(traffic|data)",
+        "days?\\s*left"
+    ).joinToString("|"),
+    RegexOption.IGNORE_CASE
+)
+
+private val VALID_DOMAIN_REGEX = Regex("^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+
+fun isPlaceholderNodeHost(value: String): Boolean {
+    val host = normalizeNodeHost(value).lowercase(Locale.US)
+    if (host.isEmpty()) return true
+    if (host == "localhost" || host == "::" || host == "::1") return true
+    if (host.startsWith("0.") || host.startsWith("127.")) return true
+    if (host == "example.com" || host == "example.net" || host == "example.org" ||
+        host.endsWith(".example.com") || host.endsWith(".example.net") || host.endsWith(".example.org") ||
+        host.endsWith(".example") || host.endsWith(".invalid") || host.endsWith(".test")
+    ) {
+        return true
+    }
+    if (isIpLiteral(host)) return false
+    // 无效域名形态：非 IP 且不符合 “label.label” 域名结构
+    return !VALID_DOMAIN_REGEX.matches(host)
+}
+
+fun isInfoNodeEntry(name: String, host: String): Boolean =
+    INFO_NODE_NAME_REGEX.containsMatchIn(name.trim()) || isPlaceholderNodeHost(host)
+
+/** 第一个既非信息条目又支持连接的节点索引；没有则返回 -1。 */
+fun firstConnectableNodeIndex(nodes: List<AnyTlsNode>): Int =
+    nodes.indexOfFirst { it.connectSupported && !it.isInfo }
+
+/**
+ * 校正选中索引：若指向信息条目/不支持连接的节点（含持久化的旧索引），
+ * 回退到第一个可连接节点；没有可连接节点时保留原（越界收敛后的）索引。
+ */
+fun resolveSelectedNodeIndex(nodes: List<AnyTlsNode>, preferred: Int): Int {
+    if (nodes.isEmpty()) return 0
+    val index = preferred.coerceIn(0, nodes.size - 1)
+    val node = nodes[index]
+    if (node.connectSupported && !node.isInfo) return index
+    val fallback = firstConnectableNodeIndex(nodes)
+    return if (fallback >= 0) fallback else index
 }
 
 data class InviteItem(

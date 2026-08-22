@@ -2,7 +2,7 @@ import { failureText } from './api/helpers'
 import { subscriptionFetch, xboardRequest, type XboardBody } from './api/xboard'
 import { formatTrafficBytes, formatUnixDate, numericValue } from './format'
 import { translate, type TranslationKey } from './i18n'
-import { toAppNode, type RawNode } from './nodes'
+import { resolveConnectableNodeIndex, toAppNode, type RawNode } from './nodes'
 import { useAppStore, type AppNode, type NoticeItem, type SubscriptionState } from './store'
 import { saveSubscriptionCache } from './store/persist'
 
@@ -99,6 +99,11 @@ export async function syncSubscription(): Promise<string | null> {
   }
 
   state.setSubscribe({ subscribeUrl: url, nodes: list })
+  // 持久化/旧的选中索引可能指向订阅里的信息条目，同步后校正为第一个可连接节点
+  const correctedIndex = resolveConnectableNodeIndex(list, state.preferredNodeIndex)
+  if (correctedIndex >= 0 && correctedIndex !== state.preferredNodeIndex) {
+    state.setPreferredNodeIndex(correctedIndex)
+  }
   state.setSubscriptionState(nextSubscription)
   await saveSubscriptionCache({
     authData: state.authData,

@@ -2,6 +2,8 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, RouterView, useRouter } from 'vue-router'
 import { useTheme } from 'vuetify'
+import { handleAerionBackendEvent } from '../desktop/connection'
+import { onAeronEvent } from '../platform/electron'
 import { installElectronTraySync } from '../platform/electron-tray-sync'
 import { isDesktopShell } from '../platform/shell'
 import { appState, applyDocumentTheme, bootstrapApp, preventDesktopZoom, t } from './state'
@@ -15,6 +17,7 @@ const bootstrapError = ref('')
 const isDesktop = isDesktopShell()
 let cleanupZoom: (() => void) | null = null
 let cleanupTraySync: (() => void) | null = null
+let cleanupSessionWatch: (() => void) | null = null
 
 const showNav = computed(() => Boolean(appState.authData) && !route.meta.hideNav)
 const appName = computed(() => {
@@ -72,6 +75,8 @@ onMounted(async () => {
   try {
     await bootstrapApp()
     if (isDesktop && appState.capabilities?.tray) cleanupTraySync = installElectronTraySync()
+    // 后端会话消亡（崩溃/自然退出）时自动归零前端连接状态
+    if (isDesktop) cleanupSessionWatch = onAeronEvent(handleAerionBackendEvent)
     if (!appState.authData && route.path !== '/login') await router.replace('/login')
     if (appState.authData && route.path === '/login') await router.replace('/home')
   } catch (error) {
@@ -84,6 +89,7 @@ onMounted(async () => {
 onUnmounted(() => {
   cleanupZoom?.()
   cleanupTraySync?.()
+  cleanupSessionWatch?.()
 })
 </script>
 

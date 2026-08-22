@@ -14,6 +14,7 @@ import {
 } from '../api/system'
 import {
   dnsAddressForVpn,
+  resolveConnectableNodeIndex,
 } from '../nodes'
 import { publicErrorText } from '../format'
 import { reportVpnSession } from '../platform/electron'
@@ -37,7 +38,7 @@ async function connectionNode(index: number): Promise<unknown> {
   const state = useAppStore.getState()
   if (state.settings.routingMode === 'direct') return { type: 'direct', name: 'DIRECT' }
   const node = state.nodes[index]
-  if (!node?.connectSupported) throw new Error('unsupported_protocol')
+  if (!node?.connectSupported || node.isInfo) throw new Error('unsupported_protocol')
   return resolvedNode(node)
 }
 
@@ -61,15 +62,45 @@ async function disconnectSession(): Promise<void> {
   const session = state.vpn
   if (!session) return
   const useTun = !session.routeMode && !session.socksAddr
-  if (session.routeMode) await aerionStopRoute(session.sessionId)
-  else if (useTun) await aerionStopVpn(session.sessionId)
-  else await aerionStop(session.sessionId)
+  try {
+    if (session.routeMode) await aerionStopRoute(session.sessionId)
+    else if (useTun) await aerionStopVpn(session.sessionId)
+    else await aerionStop(session.sessionId)
+  } catch (err) {
+    // 停止失败（含会话已不存在）视为会话已消亡：清空本地状态并继续后续流程，
+    // 避免残留会话卡死节点切换/重连
+    console.warn('stop VPN session failed; treating session as already stopped', err)
+  }
   if (state.systemProxyActive) {
     await systemProxyClear()
     state.setSystemProxyActive(false)
   }
   state.setVpn(null)
   await reportVpnSession(null)
+}
+
+/**
+ * 后端会话在未被显式停止的情况下消亡（TUN 运行时崩溃/自然退出）时的自愈：
+ * 收到 vpn_session_closed 事件后清空本地连接状态，避免 UI 显示“已连接”但 0 流量。
+ */
+export function handleAerionBackendEvent(payload: string): void {
+  let data: { type?: string; wrapper_session_id?: number }
+  try {
+    data = JSON.parse(payload) as { type?: string; wrapper_session_id?: number }
+  } catch {
+    return
+  }
+  if (data.type !== 'vpn_session_closed') return
+  const state = useAppStore.getState()
+  const session = state.vpn
+  if (!session || typeof data.wrapper_session_id !== 'number' || session.sessionId !== data.wrapper_session_id) return
+  state.setVpn(null)
+  if (state.systemProxyActive) {
+    void systemProxyClear()
+      .then(() => useAppStore.getState().setSystemProxyActive(false))
+      .catch((err) => console.warn('clear system proxy after session loss failed', err))
+  }
+  void reportVpnSession(null).catch(() => {})
 }
 
 async function startTun(index: number): Promise<void> {
@@ -122,7 +153,7 @@ async function startSocks(index: number): Promise<void> {
 async function startRoute(index: number): Promise<void> {
   const state = useAppStore.getState()
   const node = state.nodes[index]
-  if (!node?.connectSupported) throw new Error('unsupported_protocol')
+  if (!node?.connectSupported || node.isInfo) throw new Error('unsupported_protocol')
   const resolved = await resolvedNode(node)
   const configYaml = state.settings.routeConfigYaml.trim() || state.routing.routeConfigYaml
   if (!configYaml?.trim()) throw new Error('routing_rules_missing')
@@ -155,9 +186,10 @@ export async function applyDesktopConnection(): Promise<string | null> {
   if (!isDesktopConnectionShell()) return null
   const state = useAppStore.getState()
   if (state.subscription.blockReason) return null
-  const nodeIndex = state.vpn?.nodeIndex ?? state.preferredNodeIndex
+  // 首选索引可能指向订阅里的信息条目（公告伪节点），连接前校正为第一个可连接节点
+  const nodeIndex = state.vpn?.nodeIndex ?? resolveConnectableNodeIndex(state.nodes, state.preferredNodeIndex)
   const node = state.nodes[nodeIndex]
-  if (state.settings.routingMode !== 'direct' && !node?.connectSupported) return null
+  if (state.settings.routingMode !== 'direct' && (!node?.connectSupported || node.isInfo)) return null
 
   const token = ++syncToken
   syncing = true

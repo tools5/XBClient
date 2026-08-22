@@ -293,6 +293,7 @@ function backendStart() {
     try {
       const msg = JSON.parse(text)
       if (msg?.type === 'event') {
+        handleBackendSessionEvent(msg.payload)
         if (mainWindow) mainWindow.webContents.send('aerion-event', msg.payload)
         return
       }
@@ -607,17 +608,41 @@ async function trayResolveNode(node) {
   return aerionNodeWithResolvedHost(node.rawJson, resolvedHost)
 }
 
+// 后端会话在未被显式停止的情况下消亡（TUN 运行时崩溃/自然退出）时，同步清空托盘侧状态
+function handleBackendSessionEvent(payload) {
+  let data
+  try {
+    data = JSON.parse(payload)
+  } catch {
+    return
+  }
+  if (data?.type !== 'vpn_session_closed') return
+  const sessionId = data.wrapper_session_id
+  if (typeof sessionId !== 'number') return
+  if (activeVpnSessionId === sessionId) activeVpnSessionId = null
+  if (trayState.vpn && trayState.vpn.sessionId === sessionId) {
+    trayState.vpn = null
+    rebuildTrayMenu()
+    pushTrayStateToWeb({ vpn: null })
+  }
+}
+
 async function trayDisconnect() {
   if (!trayState.vpn) return
   const useTun = !trayState.vpn.routeMode && !trayState.vpn.socksAddr
-  if (trayState.vpn.routeMode) {
-    await backendInvoke('aerion_stop_route', { sessionId: trayState.vpn.sessionId })
-  } else if (useTun) {
-    await backendInvoke('aerion_stop_vpn', { sessionId: trayState.vpn.sessionId })
-    activeVpnSessionId = null
-  } else {
-    await backendInvoke('aerion_stop', { sessionId: trayState.vpn.sessionId })
+  try {
+    if (trayState.vpn.routeMode) {
+      await backendInvoke('aerion_stop_route', { sessionId: trayState.vpn.sessionId })
+    } else if (useTun) {
+      await backendInvoke('aerion_stop_vpn', { sessionId: trayState.vpn.sessionId })
+    } else {
+      await backendInvoke('aerion_stop', { sessionId: trayState.vpn.sessionId })
+    }
+  } catch (err) {
+    // 停止失败（含会话已不存在）视为会话已消亡，继续清空状态，不阻塞节点切换
+    console.warn('[tray] stop session failed; treating session as already stopped', err)
   }
+  if (useTun) activeVpnSessionId = null
   if (trayState.systemProxyOn) {
     await backendInvoke('system_proxy_clear', {})
     trayState.systemProxyOn = false
@@ -657,7 +682,7 @@ async function trayConnect(index) {
   const node = trayState.nodes[index]
   let resolved = { type: 'direct', name: 'DIRECT' }
   if (trayState.routingMode !== 'direct') {
-    if (!node?.connectSupported) throw new Error('当前节点协议不支持连接')
+    if (!node?.connectSupported || node.isInfo) throw new Error('当前节点协议不支持连接')
     resolved = await trayResolveNode(node)
   }
 
@@ -840,6 +865,7 @@ async function traySelectNode(index) {
   if (trayBusy) return
   if (index < 0 || index >= trayState.nodes.length) throw new Error(`节点索引越界：${index}`)
   const node = trayState.nodes[index]
+  if (node.isInfo) return
   if (!node.connectSupported) {
     dialog.showErrorBox('选择节点', '当前节点协议不支持连接')
     return
@@ -921,7 +947,7 @@ function rebuildTrayMenu() {
     label: trayNodeLabel(node, index),
     type: 'radio',
     checked: index === trayState.selectedNodeIndex,
-    enabled: !trayBusy && node.connectSupported,
+    enabled: !trayBusy && node.connectSupported && !node.isInfo,
     click: () => {
       void traySelectNode(index)
     },
@@ -1124,13 +1150,18 @@ if (instanceLock) {
     if (quitCleanupStarted) return
     quitCleanupStarted = true
     const cleanupTasks = []
+    // 停止残留会话失败（含会话已不存在）不应阻塞退出流程
+    const stopQuietly = (cmd, sessionId) =>
+      backendInvoke(cmd, { sessionId }).catch((err) => {
+        console.error('[before-quit] stop session failed', err instanceof Error ? err.message : String(err))
+      })
     if (trayState.vpn) {
       const stopCmd = trayState.vpn.routeMode ? 'aerion_stop_route' : trayState.useVpn ? 'aerion_stop_vpn' : 'aerion_stop'
-      cleanupTasks.push(backendInvoke(stopCmd, { sessionId: trayState.vpn.sessionId }))
+      cleanupTasks.push(stopQuietly(stopCmd, trayState.vpn.sessionId))
       trayState.vpn = null
       activeVpnSessionId = null
     } else if (activeVpnSessionId != null) {
-      cleanupTasks.push(backendInvoke('aerion_stop_vpn', { sessionId: activeVpnSessionId }))
+      cleanupTasks.push(stopQuietly('aerion_stop_vpn', activeVpnSessionId))
       activeVpnSessionId = null
     }
     if (trayState.systemProxyOn) {

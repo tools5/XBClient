@@ -15,6 +15,8 @@ export interface AppNode {
   port: number
   tags: string[]
   connectSupported: boolean
+  /** 订阅里的公告/信息伪节点（“剩余流量”“套餐到期”等），仅展示，不可连接 */
+  isInfo?: boolean
   rawJson: string
   latencyMs?: number
   testError?: string

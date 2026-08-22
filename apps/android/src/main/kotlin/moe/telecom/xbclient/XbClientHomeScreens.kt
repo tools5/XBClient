@@ -5,6 +5,7 @@ import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -48,7 +49,9 @@ import top.yukonga.miuix.kmp.theme.MiuixTheme
 @Composable
 internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
     val context = LocalContext.current
-    val selectedNode = state.anyTlsNodes.getOrNull(state.selectedNodeIndex)
+    // 选中索引可能指向订阅里的信息条目（“剩余流量”等公告伪节点），首页展示校正为真实节点
+    val selectedIndex = resolveSelectedNodeIndex(state.anyTlsNodes, state.selectedNodeIndex)
+    val selectedNode = state.anyTlsNodes.getOrNull(selectedIndex)?.takeIf { it.connectSupported && !it.isInfo }
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
     val latencySamples = remember { mutableStateListOf<Int>() }
     val uploadSpeedSamples = remember { mutableStateListOf<Long>() }
@@ -144,9 +147,9 @@ internal fun HomeScreen(state: XbClientUiState, viewModel: XbClientViewModel) {
         }
         Spacer(Modifier.height(12.dp))
     }
-    val nodeTitle = selectedNode?.displayName(state.selectedNodeIndex, stringResource(R.string.node_default_name, state.selectedNodeIndex + 1))
+    val nodeTitle = selectedNode?.displayName(selectedIndex, stringResource(R.string.node_default_name, selectedIndex + 1))
         ?: stringResource(id = if (state.nodesLoading) R.string.status_nodes_syncing else R.string.status_no_nodes)
-    val latencyText = visibleNodeTestText(state.nodeTestResults[state.selectedNodeIndex])
+    val latencyText = if (selectedNode != null) visibleNodeTestText(state.nodeTestResults[selectedIndex]) else null
     val nodeSummary = listOfNotNull(selectedNode?.protocolLabel, latencyText?.let { stringResource(R.string.node_latency, it) }).joinToString(" · ")
     PreferenceCard {
         ArrowPreference(
@@ -419,6 +422,20 @@ private fun NodeRow(
     onTest: () -> Unit,
     onSelect: () -> Unit
 ) {
+    // 信息条目（订阅公告伪节点）：弱化展示、不可点击连接、无测速按钮
+    if (node.isInfo) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+        ) {
+            Text(
+                node.name.trim().ifEmpty { node.displayName(index, stringResource(R.string.node_default_name, index + 1)) },
+                color = MiuixTheme.colorScheme.onSurfaceVariantSummary
+            )
+        }
+        return
+    }
     val tagsText = node.tags.joinToString(" · ").takeIf { it.isNotEmpty() }
     val visibleTestText = visibleNodeTestText(testText)
     val summary = listOfNotNull(node.protocolLabel, tagsText, visibleTestText).joinToString(" · ")

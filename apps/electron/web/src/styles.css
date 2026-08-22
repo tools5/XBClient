@@ -161,6 +161,12 @@ button {
   cursor: pointer;
 }
 
+/* 订阅里的信息条目（剩余流量/套餐到期等公告伪节点）：弱化展示、不可交互 */
+.node-info-card {
+  opacity: 0.62;
+  cursor: default;
+}
+
 /* App shell */
 .liquid-app {
   background: transparent !important;

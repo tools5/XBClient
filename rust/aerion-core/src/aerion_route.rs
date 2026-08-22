@@ -270,11 +270,20 @@ pub async fn start_route_from_json(input: &str) -> Result<String> {
 }
 
 pub async fn stop_route(session_id: u64) -> Result<String> {
-    let session = ROUTE_SESSIONS
+    let removed = ROUTE_SESSIONS
         .lock()
         .expect("route session map lock poisoned")
-        .remove(&session_id)
-        .with_context(|| format!("route session not found: {session_id}"))?;
+        .remove(&session_id);
+    let session = match removed {
+        Some(session) => session,
+        None => {
+            // 会话可能已自然退出或被清理，停止操作保持幂等，直接视为成功
+            log::info!("route session {session_id} not found; treating stop as already stopped");
+            return Ok(
+                json!({"ok": true, "session_id": session_id, "already_stopped": true}).to_string(),
+            );
+        }
+    };
     session.router_task.abort();
     for task in session.outbound_tasks {
         task.abort();

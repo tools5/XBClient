@@ -138,19 +138,30 @@ internal fun XbClientDialogs(state: XbClientUiState, viewModel: XbClientViewMode
     ) {
         LazyColumn(Modifier.heightIn(max = 520.dp)) {
             itemsIndexed(state.anyTlsNodes, key = { index, node -> "${node.displayName(index)}-$index" }) { index, node ->
-                val visibleTestText = visibleNodeTestText(state.nodeTestResults[index])
-                val tagsText = node.tags.joinToString(" · ").takeIf { it.isNotEmpty() }
-                val supportingText = listOfNotNull(node.protocolLabel, tagsText, visibleTestText).joinToString(" · ")
-                ArrowPreference(
-                    title = node.displayName(index, stringResource(R.string.node_default_name, index + 1)),
-                    summary = supportingText,
-                    onClick = { viewModel.chooseNodeFromDialog(index) },
-                    endActions = {
-                        if (index == state.selectedNodeIndex) {
-                            Text(stringResource(R.string.common_selected), color = MiuixTheme.colorScheme.primary)
+                if (node.isInfo) {
+                    // 信息条目（订阅公告伪节点）：弱化展示、不可点击连接
+                    Text(
+                        node.name.trim().ifEmpty { node.displayName(index, stringResource(R.string.node_default_name, index + 1)) },
+                        color = MiuixTheme.colorScheme.onSurfaceVariantSummary,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                } else {
+                    val visibleTestText = visibleNodeTestText(state.nodeTestResults[index])
+                    val tagsText = node.tags.joinToString(" · ").takeIf { it.isNotEmpty() }
+                    val supportingText = listOfNotNull(node.protocolLabel, tagsText, visibleTestText).joinToString(" · ")
+                    ArrowPreference(
+                        title = node.displayName(index, stringResource(R.string.node_default_name, index + 1)),
+                        summary = supportingText,
+                        onClick = { viewModel.chooseNodeFromDialog(index) },
+                        endActions = {
+                            if (index == state.selectedNodeIndex) {
+                                Text(stringResource(R.string.common_selected), color = MiuixTheme.colorScheme.primary)
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
         }
     }

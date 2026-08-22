@@ -291,11 +291,21 @@ pub async fn start_socks_from_json(input: &str) -> Result<String> {
 }
 
 pub async fn stop_socks(session_id: u64) -> Result<String> {
-    let session = SOCKS_SESSIONS
+    let removed = SOCKS_SESSIONS
         .lock()
         .expect("SOCKS session map lock poisoned")
-        .remove(&session_id)
-        .with_context(|| format!("SOCKS session not found: {session_id}"))?;
+        .remove(&session_id);
+    let session = match removed {
+        Some(session) => session,
+        None => {
+            // 会话可能已自然退出或被清理，停止操作保持幂等，直接视为成功
+            log::info!("SOCKS session {session_id} not found; treating stop as already stopped");
+            return Ok(
+                json!({"ok": true, "session_id": session_id, "already_stopped": true})
+                    .to_string(),
+            );
+        }
+    };
     if let Some(core) = session._core {
         core.cancel_all_sessions();
     }
@@ -642,6 +652,11 @@ mod platform {
                 if let Some(task) = event_task_inner {
                     task.abort();
                 }
+                // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态
+                on_event(
+                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id})
+                        .to_string(),
+                );
             }
         });
 
@@ -660,11 +675,21 @@ mod platform {
     }
 
     pub async fn stop(session_id: u64) -> Result<String> {
-        let session = VPN_SESSIONS
+        let removed = VPN_SESSIONS
             .lock()
             .expect("VPN session map lock poisoned")
-            .remove(&session_id)
-            .with_context(|| format!("VPN session not found: {session_id}"))?;
+            .remove(&session_id);
+        let session = match removed {
+            Some(session) => session,
+            None => {
+                // 会话可能已自然退出（TUN 运行时终止时自清理），停止操作保持幂等
+                log::info!("VPN session {session_id} not found; treating stop as already stopped");
+                return Ok(
+                    json!({"ok": true, "session_id": session_id, "already_stopped": true})
+                        .to_string(),
+                );
+            }
+        };
         session.shutdown.cancel();
         if let Some(core) = session._core {
             core.cancel_all_sessions();
@@ -791,6 +816,11 @@ mod platform {
                 if let Some(task) = session._event_task {
                     task.abort();
                 }
+                // 会话在未被显式停止的情况下消亡，通知前端自愈连接状态
+                on_event(
+                    &json!({"type": "vpn_session_closed", "wrapper_session_id": session_id})
+                        .to_string(),
+                );
             }
         });
 
@@ -809,11 +839,21 @@ mod platform {
     }
 
     pub async fn stop(session_id: u64) -> Result<String> {
-        let session = VPN_SESSIONS
+        let removed = VPN_SESSIONS
             .lock()
             .expect("VPN session map lock poisoned")
-            .remove(&session_id)
-            .with_context(|| format!("VPN session not found: {session_id}"))?;
+            .remove(&session_id);
+        let session = match removed {
+            Some(session) => session,
+            None => {
+                // 会话可能已自然退出（TUN 运行时终止时自清理），停止操作保持幂等
+                log::info!("VPN session {session_id} not found; treating stop as already stopped");
+                return Ok(
+                    json!({"ok": true, "session_id": session_id, "already_stopped": true})
+                        .to_string(),
+                );
+            }
+        };
         session.shutdown.cancel();
         if let Some(core) = session._core {
             core.cancel_all_sessions();

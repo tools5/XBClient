@@ -1,3 +1,4 @@
+import { resolveConnectableNodeIndex } from '../nodes'
 import { useAppStore } from '../store'
 import { reportVpnSession } from './electron'
 import { isDesktopShell } from './shell'
@@ -8,6 +9,7 @@ export interface TrayNodeSnapshot {
   port: number
   protocolLabel: string
   connectSupported: boolean
+  isInfo: boolean
   rawJson: string
 }
 
@@ -61,7 +63,8 @@ export interface TrayStatePushFromMain {
 function buildTraySnapshot(): TrayStateSnapshot {
   const state = useAppStore.getState()
   if (!state.buildConfig) throw new Error('runtime build config is required before tray sync')
-  const selectedNodeIndex = state.vpn?.nodeIndex ?? state.preferredNodeIndex
+  // 首选索引可能指向订阅里的信息条目，托盘同步前校正为第一个可连接节点
+  const selectedNodeIndex = state.vpn?.nodeIndex ?? resolveConnectableNodeIndex(state.nodes, state.preferredNodeIndex)
   return {
     nodes: state.nodes.map((node) => ({
       name: node.name,
@@ -69,6 +72,7 @@ function buildTraySnapshot(): TrayStateSnapshot {
       port: node.port,
       protocolLabel: node.protocolLabel,
       connectSupported: node.connectSupported,
+      isInfo: Boolean(node.isInfo),
       rawJson: node.rawJson,
     })),
     selectedNodeIndex,
