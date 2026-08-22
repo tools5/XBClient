@@ -26,7 +26,7 @@ struct SubscriptionView: View {
                         VStack(alignment: .leading, spacing: 8) {
                             Text(appState.nodeError.isEmpty ? "暂无订阅信息，下拉刷新重试" : appState.nodeError)
                                 .font(.footnote)
-                                .foregroundStyle(appState.nodeError.isEmpty ? .secondary : .red)
+                                .foregroundStyle(appState.nodeError.isEmpty ? Color.secondary : Color.red)
                             Button("重新加载") { Task { await appState.loadSubscription() } }
                                 .font(.footnote)
                         }
@@ -158,11 +158,11 @@ struct SubscriptionView: View {
                 Spacer()
                 VStack(alignment: .trailing, spacing: 2) {
                     Text(expiry.text)
-                        .foregroundStyle(expiry.isExpired ? .red : .primary)
+                        .foregroundStyle(expiry.isExpired ? Color.red : Color.primary)
                     if !expiry.detail.isEmpty {
                         Text(expiry.detail)
                             .font(.caption)
-                            .foregroundStyle(expiry.isExpired ? .red : .secondary)
+                            .foregroundStyle(expiry.isExpired ? Color.red : Color.secondary)
                     }
                 }
             }

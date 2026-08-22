@@ -129,7 +129,7 @@ struct SettingsView: View {
                 Spacer()
                 Text(showCopied ? "已复制" : (Persistence.panelURL ?? "未设置"))
                     .font(.caption)
-                    .foregroundStyle(showCopied ? .green : .secondary)
+                    .foregroundStyle(showCopied ? Color.green : Color.secondary)
                     .lineLimit(1)
                     .truncationMode(.middle)
             }
