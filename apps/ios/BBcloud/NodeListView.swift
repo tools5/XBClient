@@ -93,14 +93,8 @@ struct NodeListView: View {
                 Text(item.node.name)
                     .font(.subheadline.weight(.medium))
                     .lineLimit(1)
-                HStack(spacing: 6) {
-                    NodeTypeBadge(type: item.node.type)
-                    // String(port)：SwiftUI Text 的 Int 插值会按 locale 加千分位（42,051）。
-                    Text("\(item.node.host):\(String(item.node.port))")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
+                // 只展示协议徽章，不暴露服务器地址与端口。
+                NodeTypeBadge(type: item.node.type)
             }
             Spacer(minLength: 8)
             // 延迟徽章：点徽章单测该节点；测速失败后长按徽章看错误详情。

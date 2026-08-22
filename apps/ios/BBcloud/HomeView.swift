@@ -10,6 +10,9 @@ struct HomeView: View {
     // 本地记录进入“已连接”的时刻，用于计算连接时长（扩展未回传连接起始时间）。
     @State private var connectedAt: Date?
 
+    // 首页节点选择面板。
+    @State private var showNodePicker = false
+
     private var state: NEVPNStatus { appState.connectionState }
     private var isConnected: Bool { state == .connected }
     private var canConnect: Bool { appState.selectedNode != nil }
@@ -108,51 +111,51 @@ struct HomeView: View {
                         .contentTransition(.numericText())
                 }
             } else if !canConnect {
-                Text("请在节点页选择节点")
+                Text("请先选择节点")
                     .font(.footnote)
                     .foregroundStyle(.secondary)
             }
         }
     }
 
-    // MARK: - 当前节点卡片
+    // MARK: - 当前节点卡片（点击弹出节点选择面板）
 
     private var nodeCard: some View {
-        VStack(spacing: 12) {
-            if let node = appState.selectedNode {
-                HStack(spacing: 10) {
+        Button {
+            showNodePicker = true
+        } label: {
+            HStack(spacing: 10) {
+                if let node = appState.selectedNode {
                     Image(systemName: "globe.asia.australia.fill")
                         .font(.title2)
                         .foregroundStyle(.blue)
-                    VStack(alignment: .leading, spacing: 5) {
-                        HStack(spacing: 6) {
-                            Text(node.name)
-                                .font(.subheadline.weight(.semibold))
-                                .lineLimit(1)
-                            NodeTypeBadge(type: node.type)
-                        }
-                        // String(port)：SwiftUI Text 的 Int 插值会按 locale 加千分位（42,051）。
-                        Text("\(node.host):\(String(node.port))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer(minLength: 0)
-                }
-            } else {
-                HStack(spacing: 10) {
+                    Text(node.name)
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .foregroundStyle(.primary)
+                    NodeTypeBadge(type: node.type)
+                } else {
                     Image(systemName: "antenna.radiowaves.left.and.right.slash")
                         .font(.title2)
                         .foregroundStyle(.secondary)
-                    Text("请在节点页选择节点")
+                    Text("选择节点")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    Spacer(minLength: 0)
                 }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right")
+                    .font(.footnote.weight(.semibold))
+                    .foregroundStyle(.tertiary)
             }
+            .padding(16)
+            .frame(maxWidth: .infinity)
+            .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         }
-        .padding(16)
-        .frame(maxWidth: .infinity)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showNodePicker) {
+            NodePickerSheet()
+                .environmentObject(appState)
+        }
     }
 
     // MARK: - 实时速度（连接后显示，暂为占位）
@@ -226,5 +229,64 @@ struct HomeView: View {
         guard let start = connectedAt else { return "00:00:00" }
         let elapsed = max(0, Int(now.timeIntervalSince(start)))
         return String(format: "%02d:%02d:%02d", elapsed / 3600, (elapsed % 3600) / 60, elapsed % 60)
+    }
+}
+
+// MARK: - 首页节点选择面板
+
+// 轻量选择器：名称 + 协议徽章 + 延迟徽章，点击即选中并收起。
+// 完整功能（搜索、分组、一键测速）仍在「节点」Tab。
+private struct NodePickerSheet: View {
+    @EnvironmentObject private var appState: AppState
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            Group {
+                if appState.nodes.isEmpty {
+                    ContentUnavailableView {
+                        Label("暂无节点", systemImage: "antenna.radiowaves.left.and.right.slash")
+                    } description: {
+                        Text(appState.nodeError.isEmpty ? "正在加载或订阅为空" : appState.nodeError)
+                    } actions: {
+                        Button("重新加载") { Task { await appState.loadNodes() } }
+                            .buttonStyle(.borderedProminent)
+                    }
+                } else {
+                    List {
+                        ForEach(appState.nodeItems) { item in
+                            row(item)
+                        }
+                    }
+                }
+            }
+            .navigationTitle("选择节点")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("完成") { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private func row(_ item: NodeListItem) -> some View {
+        let isSelected = appState.selectedNodeID == item.id
+        return HStack(spacing: 10) {
+            Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                .foregroundStyle(isSelected ? Color.blue : Color(.systemGray4))
+            Text(item.node.name)
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+            NodeTypeBadge(type: item.node.type)
+            Spacer(minLength: 8)
+            LatencyBadge(outcome: appState.latency[item.id] ?? .idle)
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            appState.selectNode(item.node, id: item.id)
+            dismiss()
+        }
     }
 }

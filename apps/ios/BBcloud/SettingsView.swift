@@ -21,6 +21,9 @@ struct SettingsView: View {
     @State private var showLogoutConfirm = false
     @State private var showCopied = false
 
+    // 测速 URL 输入框焦点：键盘工具栏「完成」与滚动收起键盘都靠它。
+    @FocusState private var latencyURLFocused: Bool
+
     var body: some View {
         NavigationStack {
             List {
@@ -31,6 +34,14 @@ struct SettingsView: View {
                 accountSection
             }
             .navigationTitle("设置")
+            // 编辑测速 URL 时：滚动即收键盘；键盘上方也有「完成」按钮。
+            .scrollDismissesKeyboard(.immediately)
+            .toolbar {
+                ToolbarItemGroup(placement: .keyboard) {
+                    Spacer()
+                    Button("完成") { latencyURLFocused = false }
+                }
+            }
             .confirmationDialog("确定要退出登录吗？", isPresented: $showLogoutConfirm, titleVisibility: .visible) {
                 Button("退出登录", role: .destructive) { logout() }
                 Button("取消", role: .cancel) {}
@@ -68,6 +79,8 @@ struct SettingsView: View {
                     .multilineTextAlignment(.trailing)
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                    .focused($latencyURLFocused)
+                    .submitLabel(.done)
             }
             Picker("超时", selection: $latencyTimeoutMs) {
                 Text("1 秒").tag(1000)
