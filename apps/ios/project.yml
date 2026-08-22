@@ -82,9 +82,6 @@ targets:
         # 让 Swift 通过 module map 看到 aerion_core.h：import AerionCore。
         SWIFT_INCLUDE_PATHS: $(SRCROOT)/AerionCore
         HEADER_SEARCH_PATHS: $(SRCROOT)/AerionCore
-        # 桥接头引入 kern_control 系统头（utun fd 扫描用）。在 Swift target 的完整
-        # sysroot 上下文编译，比独立 modulemap 模块可靠。
-        SWIFT_OBJC_BRIDGING_HEADER: $(SRCROOT)/PacketTunnel/PacketTunnel-Bridging-Header.h
 
 schemes:
   BBcloud:

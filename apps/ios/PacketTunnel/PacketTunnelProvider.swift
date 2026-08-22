@@ -1,7 +1,5 @@
 import NetworkExtension
 import Darwin
-// kern_control 的 sockaddr_ctl/ctl_info 与 AERION_CTLIOCGINFO 常量经桥接头引入（见
-// PacketTunnel-Bridging-Header.h），iOS Darwin 模块默认不向 Swift 暴露它们。
 
 // NEPacketTunnelProvider：本切片的核心。流程严格按设计 §1/§2/§3：
 //   (1) 从 App Group 读粘贴的 node JSON；(2) 解析服务器 host→IP 供 excludedRoutes 防回环；
@@ -217,26 +215,18 @@ final class PacketTunnelProvider: NEPacketTunnelProvider {
     // MARK: - utun fd 定位（wireguard-apple 式扫描，设计 §1）
 
     private func locateUtunFD() -> Int32? {
-        var ctlInfo = ctl_info()
-        withUnsafeMutablePointer(to: &ctlInfo.ctl_name) {
-            $0.withMemoryRebound(to: CChar.self, capacity: MemoryLayout.size(ofValue: $0.pointee)) {
-                _ = strcpy($0, "com.apple.net.utun_control")
-            }
-        }
+        // WireGuard-apple 正宗写法：不依赖 kern_control 头（iOS SDK 不公开 <sys/kern_control.h>）。
+        // 逐个 fd 用 getsockopt 读 utun 接口名；level=SYSPROTO_CONTROL(2)、optname=UTUN_OPT_IFNAME(2)
+        // 是稳定的内核 ABI 常量。命中以 "utun" 开头的接口名即为隧道 fd。
+        let sysprotoControl: Int32 = 2
+        let utunOptIfname: Int32 = 2
         for fd: Int32 in 0...1024 {
-            var addr = sockaddr_ctl()
-            var len = socklen_t(MemoryLayout.size(ofValue: addr))
-            var ret: Int32 = -1
-            withUnsafeMutablePointer(to: &addr) {
-                $0.withMemoryRebound(to: sockaddr.self, capacity: 1) {
-                    ret = getpeername(fd, $0, &len)
-                }
+            var nameBuf = [CChar](repeating: 0, count: 128)
+            var len = socklen_t(nameBuf.count)
+            let ret = getsockopt(fd, sysprotoControl, utunOptIfname, &nameBuf, &len)
+            if ret == 0, String(cString: nameBuf).hasPrefix("utun") {
+                return fd
             }
-            if ret != 0 || addr.sc_family != UInt8(AF_SYSTEM) { continue }
-            if ctlInfo.ctl_id == 0 {
-                if ioctl(fd, AERION_CTLIOCGINFO, &ctlInfo) != 0 { continue }
-            }
-            if addr.sc_id == ctlInfo.ctl_id { return fd }
         }
         return nil
     }
