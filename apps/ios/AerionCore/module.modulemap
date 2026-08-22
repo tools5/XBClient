@@ -4,9 +4,3 @@ module AerionCore {
     header "aerion_core.h"
     export *
 }
-
-// kern_control 系统头垫片（utun fd 扫描用）。标 [system] 抑制“非模块化系统头”告警。
-module AerionSys [system] {
-    header "aerion_sys.h"
-    export *
-}

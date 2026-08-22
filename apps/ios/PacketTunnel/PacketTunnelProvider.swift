@@ -1,6 +1,7 @@
 import NetworkExtension
 import Darwin
-import AerionSys
+// kern_control 的 sockaddr_ctl/ctl_info 与 AERION_CTLIOCGINFO 常量经桥接头引入（见
+// PacketTunnel-Bridging-Header.h），iOS Darwin 模块默认不向 Swift 暴露它们。
 
 // NEPacketTunnelProvider：本切片的核心。流程严格按设计 §1/§2/§3：
 //   (1) 从 App Group 读粘贴的 node JSON；(2) 解析服务器 host→IP 供 excludedRoutes 防回环；
