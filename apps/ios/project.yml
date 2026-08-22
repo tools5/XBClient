@@ -44,6 +44,15 @@ targets:
         embed: true
         codeSign: false
       - sdk: NetworkExtension.framework
+      # 主 App 也链接 Rust 静态库：节点延迟测速（aerion_test_node）在 App 进程内跑，
+      # 未连接 VPN 也能测。依赖列表与扩展保持一致。
+      - sdk: Security.framework
+      - sdk: Network.framework
+      - sdk: SystemConfiguration.framework
+      - sdk: CoreFoundation.framework
+      - sdk: libresolv.tbd
+      - sdk: libc++.tbd
+      - sdk: libz.tbd
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: moe.telecom.xbclient
@@ -51,6 +60,11 @@ targets:
         INFOPLIST_FILE: BBcloud/Info.plist
         MARKETING_VERSION: "0.1.0"
         CURRENT_PROJECT_VERSION: "1"
+        # Rust 静态库与 C 头（与 PacketTunnel target 相同的链接配置）。
+        LIBRARY_SEARCH_PATHS: $(SRCROOT)/Vendor
+        OTHER_LDFLAGS: -laerion_core
+        SWIFT_INCLUDE_PATHS: $(SRCROOT)/AerionCore
+        HEADER_SEARCH_PATHS: $(SRCROOT)/AerionCore
 
   # ---------------- PacketTunnel 扩展 ----------------
   PacketTunnel:
